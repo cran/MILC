@@ -1,0 +1,29 @@
+\name{never.other}
+\alias{never.other}
+\docType{data}
+\title{never.other dataset
+}
+\description{
+An R object of class "list" containing Cumulative Incidence Function estimates for other cause (not lung cancer) mortality, for non smokers by age (5-years age group), and gender ("male" or "female").}
+\usage{never.other}
+\format{
+The \emph{`never.other'} list comprises 22 components in total. Each component itself is an R object of class "list" with three components, i.e.:
+
+[[1]] a vector with time points (in years)
+
+[[2]] a vector with CIF estimates 
+
+[[3]] a vector with variances of the CIF estimates
+}
+\source{CIF estimates are derived using data obtained from the National Health Interview Survey (NHIS) database covering the years 1986-2004.
+}
+\seealso{ \code{\link{ci.lung}, \link{current.other}, \link{former.other}}
+}
+\examples{
+data(never.other)
+never.other[1]
+never.other[[1]][1]	# time (years)
+never.other[[1]][2]	# CIF estimates
+never.other[[1]][3]	# variances of CIF estimates
+}
+\keyword{Datasets}
