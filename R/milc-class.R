@@ -1,23 +1,18 @@
 #' MILC microsimulation model (R6)
 #'
 #' Encapsulates a MILC natural-history simulation over a `data.table` population,
-#' following the `ToyModel` idiom: a single population table is carried by the
+#' following the `nhppp`-DES idioms from the Trikalinos, Alarid,  Sereda, and Chrysanthopoulou  
+#' DES with `nhppp` paradigm. 
 #' object, event generators fill columns in place, and results are retrieved with
 #' [getPopulation()][MILC]. Sampling uses the `nhppp` package.
 #'
-#' SCAFFOLD STATUS: the class interface and lifecycle (`initialize`/`update`/
-#' `reset`/`getPopulation`) are in place; the private per-event generators dispatch
-#' to the stubs in `generators.R` and will error until those are implemented.
-#'
 #' @export
-MILC <- R6::R6Class(
-  classname = "MILC",
+Population <- R6::R6Class(
+  classname = "Population",
   public = list(
-    #' @description Create a MILC model bound to a population.
-    #' @param population A [data.table][data.table::data.table]; one row per
-    #'   individual. Required columns: `id`, `sex`, `spawn_age`,
-    #'   `max_simulation_age` (further parameter columns documented per generator).
-    initialize = function(population) {
+    initialize = function(
+      
+    ) {
       private$.setPopulation(population = population, copy = TRUE)
       private$.simulation_erased <- TRUE
       invisible(self)
