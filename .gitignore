@@ -1,0 +1,64 @@
+# temporary and old
+*/old/*
+*/tmp/*
+tmp/*
+old/
+*/test/*
+*/designs/*
+
+# other ephemeral
+production/*.rds
+aws/
+#data/
+#results/
+
+
+#Mac cruft
+.DS_Store
+
+# Secrets
+config.yml
+google_secrets.json
+.env
+
+# Editor cruft
+.vscode
+*~
+.*.swp
+
+# Python cruft
+*.egg-info
+*.pyc
+*.ipynb_checkpoints
+venv
+
+
+
+# R cruft
+# History files
+.Rhistory
+.Rapp.history
+.RData
+.Ruserdata
+*-Ex.R
+/*.tar.gz
+/*.Rcheck/
+.Rproj.user/
+*.Rproj
+vignettes/*.html
+vignettes/*.pdf
+.httr-oauth
+*_cache/
+/cache/
+*.utf8.md
+*.knit.md
+.Renviron
+.Rprofile
+.Rproj.user
+*_old
+*old
+*DS_Store
+inst/doc
+
+renv/
+renv.lock

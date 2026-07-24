@@ -1,0 +1,43 @@
+---
+title: "fastMILC: vectorizing MILC with nhppp"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{fastMILC: vectorizing MILC with nhppp}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
+```
+
+```{r setup}
+library(fastMILC)
+```
+
+## Scope
+
+`fastMILC` re-implements the continuous-time microsimulation lung-cancer model
+MILC with vectorized `nhppp` sampling over a `data.table` population. This
+vignette is a **scaffold placeholder**; it will grow into a walk-through of the
+scalar-to-vectorized refactor as the event generators are implemented.
+
+## Ported kernel functions
+
+The pure MILC kernels are vectorized and validated against the archival scalars:
+
+```{r}
+milc_HT_mal(t = c(50, 60, 70), gender = "male", d = 20, smok_status = "Y")
+milc_age_grp(c(38, 47, 88))
+```
+
+## Converted mortality tables
+
+The archival cumulative-incidence tables are shipped as tidy step-hazard
+`data.table`s (tabulated horizon only; upper-tail handling is a separate design
+decision):
+
+```{r}
+head(other_cells)
+head(lung_cells)
+```

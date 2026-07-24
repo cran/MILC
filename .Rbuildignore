@@ -1,0 +1,11 @@
+^\.claude$
+^archival_code$
+^example_to_imitate$
+^data-raw$
+^CLAUDE\.md$
+^MEMORY\.md$
+^\.git$
+^\.DS_Store$
+^.*\.Rproj$
+^\.Rproj\.user$
+^LICENSE\.md$
