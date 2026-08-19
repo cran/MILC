@@ -3,10 +3,13 @@ Type: Package
 Title: Fast Vectorized MIcrosimulation Lung Cancer (MILC) Model
 Version: 0.0.0.9000
 Authors@R: c(
-    person("Stavroula A.", "Chrysanthopoulou", role = "aut",
-           comment = "Original MILC model and archival implementation"),
     person("Thomas A.", "Trikalinos", email = "ttrikalin@mac.com",
-           role = c("aut", "cre")))
+           role = c("aut", "cre")),
+    person("Sarah", "Robertson", email = "Sarah.E.Robertson@dartmouth.edu",
+           role = c("aut")),
+    person("Stavroula A.", "Chrysanthopoulou", role = "aut",
+           comment = "Original MILC model and archival implementation")
+    )
 Description: A vectorized re-implementation of the continuous-time
     microsimulation lung cancer natural-history model MILC. Event times are
     sampled with the 'nhppp' non-homogeneous Poisson point process samplers over
@@ -22,7 +25,7 @@ Depends:
 Imports:
     R6,
     data.table,
-    nhppp (>= 1.0.5)
+    nhppp
 Suggests:
     testthat (>= 3.0.0),
     knitr,
@@ -31,3 +34,10 @@ VignetteBuilder: knitr
 Config/testthat/edition: 3
 Roxygen: list(markdown = TRUE)
 RoxygenNote: 7.3.3
+Collate: 
+    'utils-helper.R'
+    'RNGStreams.R'
+    'utils-validate_recipe.R'
+    'utils-validate_population.R'
+    'Population-class.R'
+    'utils-onLoad.R'

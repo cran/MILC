@@ -14,15 +14,19 @@ RNGStreams <- R6::R6Class(
   classname = "RNGStreams",
   cloneable = FALSE,
   public = list(
-    initialize = function(antithetic = getOption("pneumon.antithetic"),
-                          increased_precision = FALSE,
-                          stream_names = getOption("pneumon.rng_stream_names"),
-                          seed = getOption("pneumon.globalRNG.seed")) {
+    initialize = function(
+      antithetic = getOption("milc.antithetic"),
+      increased_precision = FALSE,
+      stream_names = getOption("milc.rng_stream_names"),
+      seed = getOption("milc.globalRNG.seed")
+    ) {
       if (exists(".lec.Random.seed.table", envir = .GlobalEnv)) {
-        warning("The RNGStreams class is already initialized.
+        warning(
+          "The RNGStreams class is already initialized.
           In the old `rng` RNGStreams object, use the `rng$stopAllStreams()`
           method to remove it before creating a new object.\n
-          I will erase the previous object and start a new one.")
+          I will erase the previous object and start a new one."
+        )
         remove_lecuyer() # package function
       }
 
@@ -86,9 +90,13 @@ RNGStreams <- R6::R6Class(
     #' @return invisible(self)
     resetStream = function(stream) {
       is_active <- (stream == private$.active_stream)
-      if (is_active) private$.unsetCurrentStream()
+      if (is_active) {
+        private$.unsetCurrentStream()
+      }
       rlecuyer::.lec.ResetStartStream(name = stream)
-      if (is_active) private$.setCurrentStream(stream = stream)
+      if (is_active) {
+        private$.setCurrentStream(stream = stream)
+      }
       invisible(self)
     },
     #' @description Reset all streams.
@@ -104,9 +112,13 @@ RNGStreams <- R6::R6Class(
     #' @return invisible(self)
     resetCurrentSubstream = function(stream) {
       is_active <- (stream == private$.active_stream)
-      if (is_active) private$.unsetCurrentStream()
+      if (is_active) {
+        private$.unsetCurrentStream()
+      }
       rlecuyer::.lec.ResetStartSubstream(name = stream)
-      if (is_active) private$.setCurrentStream(stream = stream)
+      if (is_active) {
+        private$.setCurrentStream(stream = stream)
+      }
       invisible(self)
     },
     #' @description Reset the active stream to the next substream.
@@ -114,9 +126,13 @@ RNGStreams <- R6::R6Class(
     #' @return invisible(self)
     resetToNextSubstream = function(stream) {
       is_active <- (stream == private$.active_stream)
-      if (is_active) private$.unsetCurrentStream()
+      if (is_active) {
+        private$.unsetCurrentStream()
+      }
       rlecuyer::.lec.ResetNextSubstream(name = stream)
-      if (is_active) private$.setCurrentStream(stream = stream)
+      if (is_active) {
+        private$.setCurrentStream(stream = stream)
+      }
       invisible(self)
     },
     #' @description Stop all streams and reset the default RNGkind of `R`. (Avoid using this method.)

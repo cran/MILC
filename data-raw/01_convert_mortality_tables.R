@@ -30,6 +30,9 @@ convert_stratum <- function(el, time_scale = 1) {
   )
   setnames(tmp, old = names(tmp), new = c("F", "var_F", "t_a", "t_b"))
   tmp[, S := 1 - F]
+  stopifnot(tmp[, all(diff(F) >= -1e-12)]) # F nondecreasing
+  tmp[, dt := t_b - t_a]
+  tmp[, lambda := -diff(log(S)) / dt] # >=0; Inf iff S hits 0
   # right-continuous CIF: post-jump value = max est at each unique time
   cdf <- raw[, .(F = max(est)), by = time][order(time)]
   cdf[, S := 1 - F]
