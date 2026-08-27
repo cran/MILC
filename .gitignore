@@ -15,6 +15,7 @@ aws/
 
 #Mac cruft
 .DS_Store
+*/.DS_Store
 
 # Secrets
 config.yml
@@ -57,7 +58,6 @@ vignettes/*.pdf
 .Rproj.user
 *_old
 *old
-*DS_Store
 inst/doc
 
 renv/
