@@ -48,10 +48,13 @@ Population <- R6::R6Class(
     #' @description Run the natural-history simulation, filling event columns.
     update = function() {
       stopifnot(private$.simulation_erased)
+      private$.simulated_cols <- NULL
       private$.generateAgeDeadFromOtherCauses(reset_rng_stream = TRUE)
       private$.generateDiseaseOnset(reset_rng_stream = TRUE)
       private$.generateDiseaseProgression(reset_rng_stream = TRUE)
+      private$.enforceEntryCondition()
       private$.generateAgeDeadFromLungCancer(reset_rng_stream = TRUE)
+      private$.assembleHistory()
       private$.simulation_erased <- FALSE
       invisible(self)
     },
@@ -216,7 +219,17 @@ Population <- R6::R6Class(
       invisible(self)
     },
 
-    .generateAgeDeadFromOtherCauses = function(reset_rng_stream) {
+    # Columns of the parameter table used by the generators (all but `sex`).
+    .parameterCols = function() {
+      setdiff(names(private$.parameters), "sex")
+    },
+
+    # Latent age at death from other causes (model.tex, Section 6). Draws with
+    # death before study entry (possible only under the archival tail for
+    # entry > milc.max_age - horizon) are redrawn: only people alive at entry
+    # enter the simulation.
+    .generateAgeDeadFromOtherCauses = function(reset_rng_stream,
+                                               max_rounds = 1000L) {
       on.exit(
         private$.rng_stream$activateStream("population"),
         add = TRUE,
@@ -227,28 +240,25 @@ Population <- R6::R6Class(
       }
       private$.rng_stream$activateStream("death_from_other_causes")
 
-      #browser()
-
-      private$.population[,
-        age_dead_from_other_causes := generate_death_other(
+      draw <- function(i) {
+        private$.population[i, generate_death_other(
           age_entry = spawn_age,
           sex = sex,
           smoking_status = smoking_status_at_spawn_age,
           intensity = smoking_intensity_at_spawn_age,
           tail = getOption("milc.death_other_tail")
-        )
-      ]
-
-      if ("age_dead_from_lung_cancer" %in% names(private$.population)) {
-        private$.population[,
-          age_dead := pmin(
-            age_dead_from_other_causes,
-            age_dead_from_lung_cancer,
-            na.rm = TRUE
-          )
-        ]
-      } else {
-        private$.population[, age_dead := age_dead_from_other_causes]
+        )]
+      }
+      vals <- draw(seq_len(nrow(private$.population)))
+      private$.population[, age_dead_from_other_causes := vals]
+      for (round in seq_len(max_rounds)) {
+        bad <- private$.population[, which(age_dead_from_other_causes < spawn_age)]
+        if (length(bad) == 0L) break
+        set(private$.population, bad, "age_dead_from_other_causes", draw(bad))
+      }
+      if (length(bad) > 0L) {
+        stop("Other-cause death before entry not resolved after ",
+             max_rounds, " rounds for ", length(bad), " individual(s)")
       }
 
       private$.simulated_cols <- c(
@@ -256,6 +266,21 @@ Population <- R6::R6Class(
         "age_dead_from_other_causes"
       )
       invisible(self)
+    },
+
+    # Latent age at onset of the first malignant cell, from birth
+    # (model.tex, Section 4). NA if no onset by milc.max_age.
+    .drawOnset = function(rows) {
+      private$.population[
+        rows,
+        generate_onset(
+          params = .SD,
+          age_smoking_start = age_smoking_start,
+          age_smoking_quit = age_smoking_quit,
+          intensity = smoking_intensity_at_spawn_age
+        ),
+        .SDcols = private$.parameterCols()
+      ]
     },
 
     .generateDiseaseOnset = function(reset_rng_stream) {
@@ -269,19 +294,8 @@ Population <- R6::R6Class(
       }
       private$.rng_stream$activateStream("disease_onset")
 
-      #browser()
-      onset_cols <- setdiff(names(private$.parameters), "sex")
-      private$.population[,
-        age_at_disease_onset := generate_onset(
-          params = .SD,
-          age_smoking_start = age_smoking_start,
-          age_smoking_quit = age_smoking_quit,
-          intensity = smoking_intensity_at_spawn_age
-        ),
-        .SDcols = onset_cols
-      ]
-
-      private$.resolveAges(index_var = "age_at_disease_onset")
+      vals <- private$.drawOnset(seq_len(nrow(private$.population)))
+      private$.population[, age_at_disease_onset := vals]
 
       private$.simulated_cols <- c(
         private$.simulated_cols,
@@ -290,53 +304,24 @@ Population <- R6::R6Class(
       invisible(self)
     },
 
-    .getAgeFromTumorVolume = function(tumor_logvolume_var, age_var) {
-      private$.population[,
-        (age_var) := age_at_disease_onset +
-          (-tumor_growth_scale^(-1) *
-            log(
-              1 -
-                (tumor_growth_scale / tumor_growth_shape) *
-                  (get(tumor_logvolume_var) - tumor_logvolume_min)
-            ))
-      ]
-      invisible(self)
-    },
+    # Latent progression after onset (model.tex, Section 5).
+    .progressionCols = c(
+      "age_at_regional_disease",
+      "age_at_distal_disease",
+      "age_at_diagnosis",
+      "diameter_at_diagnosis",
+      "stage_at_diagnosis"
+    ),
 
-    .applyLogvolumeBounds = function(tumor_logvolume_var) {
-      #browser()
-      private$.population[,
-        (tumor_logvolume_var) := fifelse(
-          (get(tumor_logvolume_var) < tumor_logvolume_min) |
-            (get(tumor_logvolume_var) > tumor_logvolume_max),
-          NA,
-          get(tumor_logvolume_var)
-        )
-      ]
-      invisible(self)
+    .drawProgression = function(rows) {
+      generate_progression(
+        age_onset = private$.population$age_at_disease_onset[rows],
+        params = private$.population[
+          rows, .SD,
+          .SDcols = private$.parameterCols()
+        ]
+      )
     },
-
-    # .applyAgeBoundsForTumorVolumes = function(age_var) {
-    #   #browser()
-    #   private$.population[,
-    #     (age_var) := fifelse(
-    #       (get(age_var) < spawn_age) |
-    #         (get(age_var) > age_dead_from_other_causes),
-    #       NA,
-    #       get(age_var)
-    #     )
-    #   ]
-    #   if (age_var != "age_at_disease_onset") {
-    #     private$.population[,
-    #       (age_var) := fifelse(
-    #         (get(age_var) < age_at_disease_onset),
-    #         NA,
-    #         get(age_var)
-    #       )
-    #     ]
-    #   }
-    #   invisible(self)
-    # },
 
     .generateDiseaseProgression = function(reset_rng_stream) {
       on.exit(
@@ -349,101 +334,48 @@ Population <- R6::R6Class(
       }
       private$.rng_stream$activateStream("disease_progression")
 
-      #browser()
-
-      private$.population[,
-        u_regional := runif(.N, min = 0, max = 1)
-      ]
-      private$.population[,
-        u_distal := runif(.N, min = 0, max = 1)
-      ]
-      # sample logvolume_regional
-      private$.population[,
-        tumor_logvolume_regional := qnorm(
-          u_regional,
-          mean = tumor_logvolume_regional_mean,
-          sd = tumor_logvolume_regional_sd
-        )
-      ]
-      # sample logvolume_distal as conditional normal distribution
-      # so that tumor_logvolume_distal > tumor_logvolume_regional
-      private$.population[,
-        tumor_logvolume_distal := qnorm(
-          u_regional + u_distal * (1 - u_regional),
-          mean = tumor_logvolume_distal_mean,
-          sd = tumor_logvolume_distal_sd
-        )
-      ]
-      # sample logvolume_diagnosis
-      private$.population[,
-        tumor_logvolume_diagnosis := rnorm(
-          .N,
-          mean = tumor_logvolume_diagnosis_mean,
-          sd = tumor_logvolume_diagnosis_sd
-        )
-      ]
-
-      # cleanup
-      private$.applyLogvolumeBounds(
-        tumor_logvolume_var = "tumor_logvolume_regional"
-      )
-      private$.applyLogvolumeBounds(
-        tumor_logvolume_var = "tumor_logvolume_distal"
-      )
-      private$.applyLogvolumeBounds(
-        tumor_logvolume_var = "tumor_logvolume_diagnosis"
-      )
-
-      private$.getAgeFromTumorVolume(
-        tumor_logvolume_var = "tumor_logvolume_regional",
-        age_var = "age_at_regional_disease"
-      )
-      private$.getAgeFromTumorVolume(
-        tumor_logvolume_var = "tumor_logvolume_distal",
-        age_var = "age_at_distal_disease"
-      )
-      private$.getAgeFromTumorVolume(
-        tumor_logvolume_var = "tumor_logvolume_diagnosis",
-        age_var = "age_at_diagnosis"
-      )
-      # private$.applyAgeBoundsForTumorVolumes(
-      #   age_var = "age_at_regional_disease"
-      # )
-      # private$.applyAgeBoundsForTumorVolumes(age_var = "age_at_distal_disease")
-      # private$.applyAgeBoundsForTumorVolumes(age_var = "age_at_diagnosis")
-      private$.resolveAges(index_var = "age_at_regional_disease")
-      private$.resolveAges(index_var = "age_at_distal_disease")
-      private$.resolveAges(index_var = "age_at_diagnosis")
-
-      private$.population[,
-        stage_at_diagnosis := fcase(
-          age_at_diagnosis < pmin(age_at_regional_disease, Inf, na.rm = TRUE)                                                                     , "local_disease"    ,
-          age_at_diagnosis > pmin(age_at_regional_disease, Inf, na.rm = TRUE) & age_at_diagnosis < pmin(age_at_distal_disease, Inf, na.rm = TRUE) , "regional_disease" ,
-          age_at_diagnosis > pmin(age_at_distal_disease, Inf, na.rm = TRUE)                                                                       , "distal_disease"   ,
-          default = NA_character_
-        )
-      ]
-
-      drop_cols <- c(
-        "u_regional",
-        "u_distal",
-        "tumor_logvolume_regional",
-        "tumor_logvolume_distal",
-        "tumor_logvolume_diagnosis"
-      )
-
-      private$.population[, (drop_cols) := NULL]
+      prog <- private$.drawProgression(seq_len(nrow(private$.population)))
+      private$.population[, (private$.progressionCols) := prog]
 
       private$.simulated_cols <- c(
         private$.simulated_cols,
-        "age_at_regional_disease",
-        "age_at_distal_disease",
-        "age_at_diagnosis",
-        "stage_at_diagnosis"
+        private$.progressionCols
       )
       invisible(self)
     },
 
+    # Entry condition: the simulation starts at study entry (trial start), and
+    # only people without a clinically diagnosed lung cancer at entry enter.
+    # Undiagnosed (pre-clinical) malignancies at entry are allowed. Rejection
+    # sampling: for people diagnosed before entry, onset and progression are
+    # redrawn jointly until diagnosis is at or after entry (or does not occur),
+    # which samples their conditional law given eligibility exactly. Not in
+    # the archival code (model.tex, Section 2).
+    .enforceEntryCondition = function(max_rounds = 1000L) {
+      on.exit(
+        private$.rng_stream$activateStream("population"),
+        add = TRUE,
+        after = FALSE
+      )
+      pop <- private$.population # set() on existing columns only
+      for (round in seq_len(max_rounds)) {
+        bad <- pop[, which(!is.na(age_at_diagnosis) & age_at_diagnosis < spawn_age)]
+        if (length(bad) == 0L) break
+        private$.rng_stream$activateStream("disease_onset")
+        set(pop, bad, "age_at_disease_onset", private$.drawOnset(bad))
+        private$.rng_stream$activateStream("disease_progression")
+        prog <- private$.drawProgression(bad)
+        for (v in private$.progressionCols) set(pop, bad, v, prog[[v]])
+      }
+      if (length(bad) > 0L) {
+        stop("Entry condition not met after ", max_rounds, " rounds for ",
+             length(bad), " individual(s)")
+      }
+      invisible(self)
+    },
+
+    # Latent age at death from lung cancer, for everyone with a (latent)
+    # diagnosis, as in the archival nat_hist (model.tex, Section 7).
     .generateAgeDeadFromLungCancer = function(reset_rng_stream) {
       on.exit(
         private$.rng_stream$activateStream("population"),
@@ -462,108 +394,51 @@ Population <- R6::R6Class(
           sex = sex
         )
       ]
-      private$.population[,
-        age_dead := pmin(
-          age_dead_from_other_causes,
-          age_dead_from_lung_cancer,
-          na.rm = TRUE
-        )
-      ]
-
-      ### now resolve all ages
-      private$.resolveAges(index_var = "age_at_disease_onset")
-      private$.resolveAges(index_var = "age_at_diagnosis")
-      private$.resolveAges(index_var = "age_at_regional_disease")
-      private$.resolveAges(index_var = "age_at_distal_disease")
-      private$.resolveAges(index_var = "age_dead")
-      private$.resolveAges(index_var = "age_dead_from_lung_cancer")
-
-      private$.population[,
-        cause_of_death := fifelse(
-          is.na(age_dead_from_lung_cancer),
-          "other_causes",
-          "lung_cancer"
-        )
-      ]
 
       private$.simulated_cols <- c(
         private$.simulated_cols,
-        "age_dead_from_lung_cancer",
-        "cause_of_death"
+        "age_dead_from_lung_cancer"
       )
       invisible(self)
     },
 
-    .resolveAges = function(index_var) {
-      stopifnot(!is.null(index_var))
-      disease_progression_vars <- c(
-        "age_at_regional_disease",
-        "age_at_distal_disease",
-        "age_at_diagnosis",
-        "age_dead_from_lung_cancer",
-        "age_dead"
-      )
-      all_age_vars <- c(
-        disease_progression_vars,
-        "age_at_disease_onset",
-        "age_dead_from_other_causes"
-      )
-      existing_vars <- intersect(
-        x = all_age_vars,
-        y = names(private$.population)
-      )
-      stopifnot(index_var %in% existing_vars)
-      missing_vars <- setdiff(x = all_age_vars, y = names(private$.population))
-
-      private$.population[,
-        (index_var) := fifelse(
-          get(index_var) %between% .(spawn_age, getOption("milc.max_age")),
-          get(index_var),
-          NA
-        )
-      ]
-
-      if (index_var %in% disease_progression_vars) {
-        stopifnot("age_at_disease_onset" %in% existing_vars)
-        stopifnot("age_dead" %in% existing_vars)
-        switch(
-          EXPR = index_var,
-          age_at_diagnosis = ,
-          age_at_regional_disease = {
-            private$.population[,
-              (index_var) := fifelse(
-                get(index_var) %between%
-                  .(age_at_disease_onset, age_dead),
-                get(index_var),
-                NA
-              )
-            ]
-          },
-          age_at_distal_disease = {
-            stopifnot("age_at_regional_disease" %in% existing_vars)
-            private$.population[,
-              (index_var) := fifelse(
-                get(index_var) %between%
-                  .(age_at_regional_disease, age_dead),
-                get(index_var),
-                NA
-              )
-            ]
-          },
-          age_dead_from_lung_cancer = {
-            stopifnot("age_dead_from_other_causes" %in% existing_vars)
-            private$.population[,
-              (index_var) := fifelse(
-                get(index_var) %between%
-                  .(age_at_diagnosis, age_dead_from_other_causes),
-                get(index_var),
-                NA
-              )
-            ]
-          }
-        )
+    # Assembly (model.tex, Section 8). Death is the first of the two latent
+    # death times (cause "other_causes" if the other-cause time is earlier,
+    # "lung_cancer" otherwise, as in nat_hist). Follow-up ends at death or at
+    # milc.max_age; a person alive at milc.max_age has age_dead and
+    # cause_of_death NA. Progression events (onset, regional, distant,
+    # diagnosis) after the end of follow-up are set to NA, together with stage
+    # and diameter at diagnosis; onset and stage transitions before entry are
+    # kept (undiagnosed malignancy at entry). The cause-specific death ages
+    # stay latent.
+    .assembleHistory = function() {
+      M <- getOption("milc.max_age")
+      private$.population[, age_dead := pmin(
+        age_dead_from_other_causes, age_dead_from_lung_cancer,
+        na.rm = TRUE
+      )]
+      private$.population[, cause_of_death := fifelse(
+        !is.na(age_dead_from_lung_cancer) &
+          age_dead_from_lung_cancer <= age_dead_from_other_causes,
+        "lung_cancer", "other_causes"
+      )]
+      pop <- private$.population # set() on existing columns only
+      pop[age_dead > M, `:=`(age_dead = NA_real_, cause_of_death = NA_character_)]
+      end_of_followup <- pop[, fifelse(is.na(age_dead), M, age_dead)]
+      for (v in c("age_at_disease_onset", "age_at_regional_disease",
+                  "age_at_distal_disease", "age_at_diagnosis")) {
+        after <- which(pop[[v]] > end_of_followup)
+        if (length(after)) set(pop, after, v, NA_real_)
       }
-
+      pop[is.na(age_at_diagnosis), `:=`(
+        diameter_at_diagnosis = NA_real_,
+        stage_at_diagnosis = NA_character_
+      )]
+      private$.simulated_cols <- c(
+        private$.simulated_cols,
+        "age_dead",
+        "cause_of_death"
+      )
       invisible(self)
     }
   )

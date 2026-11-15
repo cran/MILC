@@ -70,7 +70,9 @@ test_that("every recipe row has an other-cause mortality table", {
 })
 
 test_that("Population builds from the canonical recipe", {
-  p <- Population$new(1000, simulate_at_initialization = FALSE)
+  p <- suppressWarnings( # default rng_stream re-creates the RNGStreams singleton
+    Population$new(1000, simulate_at_initialization = FALSE)
+  )
   pop <- p$getPopulation()
   expect_identical(nrow(pop), 26730L)
   expect_true(all(c("study_entry_moment", "smoking_start_moment",

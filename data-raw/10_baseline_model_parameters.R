@@ -17,10 +17,6 @@
 # Smoking parameter set: kappa(q) = 1 + alpha_1 q^alpha_2, alpha_s =
 # alpha_s0 kappa(q), gamma_s = gamma kappa(q), nu_s = rho nu_ns, mu_s = mu.
 #
-# Progression parameters are unchanged from the previous version (IJM values,
-# log-volumes for diameters in cm); step 5 replaces them with the archival
-# t_prog parameterization.
-#
 # Run from the package root: Rscript data-raw/10_baseline_model_parameters.R
 
 library(data.table)
@@ -38,21 +34,24 @@ deterministic_params <- data.table(
   smoking_dose_exponent = c(0.22, 0.32)
 )
 
+# Progression (archival t_prog parameterization; model.tex, Section 5).
+# Values: IJM Table 2 posterior medians (m, mu_reg, mu_dist, mu_diagn), with
+# location = scale (IJM). The archival code has no defaults (the nat_hist
+# examples use m = 0.00042, cdiagn = 3.91, creg = 1.1, cdist = 2.8).
+#   tumor_growth_rate          m        Gompertz scale, per day
+#   volume_diagnosis_meanlog   cdiagn[1], volume_diagnosis_sdlog cdiagn[2]
+#   volume_regional_meanlog    creg[1],   volume_regional_sdlog  creg[2]
+#   volume_distant_meanlog     cdist[1],  volume_distant_sdlog   cdist[2]
+# (log-normal parameters of volume in ml). generate_progression() reproduces
+# the archival swap: V_reg is drawn with cdist and V_dist with creg.
 deterministic_params[, `:=`(
-  tumor_logvolume_min = log(pi / 6 * (10^-5 * 100)^3), # diameters in cm!
-  tumor_logvolume_max = log(pi / 6 * (0.13 * 100)^3), # diameters in cm!
-
-  tumor_growth_scale = (3.4 * 10^-4) * 365.24, # scale time_intervals in YEARS!
-  tumor_growth_shape = 31 * (3.4 * 10^-4) * 365.24, # scale time_intervals in YEARS!
-
-  tumor_logvolume_regional_mean = 2.16, # for diameters in cm!
-  tumor_logvolume_regional_sd = 2.16, # for diameters in cm!
-
-  tumor_logvolume_distal_mean = 5.62, # for diameters in cm!
-  tumor_logvolume_distal_sd = 5.62, # for diameters in cm!
-
-  tumor_logvolume_diagnosis_mean = 2.65, # for diameters in cm!
-  tumor_logvolume_diagnosis_sd = 2.65 # for diameters in cm!
+  tumor_growth_rate = 3.4e-4,
+  volume_diagnosis_meanlog = 2.65,
+  volume_diagnosis_sdlog = 2.65,
+  volume_regional_meanlog = 2.16,
+  volume_regional_sdlog = 2.16,
+  volume_distant_meanlog = 5.62,
+  volume_distant_sdlog = 5.62
 )]
 
 usethis::use_data(deterministic_params, overwrite = TRUE)

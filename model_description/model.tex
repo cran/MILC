@@ -131,10 +131,32 @@ if there is no root.
 
 \paragraph{Progression (Section~\ref{sec:progression}).} The volume thresholds
 are drawn exactly from the truncated law on $\mathcal A$ \eqref{eq:truncset}:
-$\Vdiagn$ by inverse CDF of its truncated log-normal, $(\Vreg,\Vdist)$ by
-vectorized rejection that redraws only rejected rows. As in the archival code,
-$\mu_\bullet=\mathrm{sd}_\bullet$, and $\Vreg$ is drawn with the parameter vector
-named \code{cdist} and $\Vdist$ with the one named \code{creg}.
+$\Vdiagn$ by inverse CDF of its log-normal truncated to $(V_0,V_{\max})$;
+$\Vreg$ and $\Vdist$ by inverse CDF of their laws truncated to $(V_0,V_{\max})$,
+redrawing only the rows with $\Vreg\ge\Vdist$ (acceptance about 0.46 at the
+default values). As in the archival code, $\mu_\bullet=\mathrm{sd}_\bullet$, and
+$\Vreg$ is drawn with the parameter vector named \code{cdist} and $\Vdist$ with
+the one named \code{creg}. The archival code has no default values; the
+\code{nat\_hist} examples use $m=4.2\times10^{-4}$, \code{cdiagn} $=3.91$,
+\code{creg} $=1.1$, \code{cdist} $=2.8$. \code{fastMILC} uses the IJM posterior
+medians $(m,\mu_{\mathrm{reg}},\mu_{\mathrm{dist}},\mu_{\mathrm{diagn}}) =
+(3.4\times10^{-4}, 2.16, 5.62, 2.65)$ for \code{(m, creg, cdist, cdiagn)}. The
+progression times agree in distribution with \code{t\_prog} (two-sample
+Kolmogorov--Smirnov tests on all three times and the diameter, and a $\chi^2$
+test on stage, in the package tests).
+
+\paragraph{Entry condition.} The simulation starts at study entry (the start of
+the trial), and only people who are alive and have no clinically diagnosed lung
+cancer at entry enter it. An undiagnosed malignancy at entry, including one that
+has progressed to the regional or distant stage, is allowed. Onset is still
+drawn from birth (Section~\ref{sec:onset}). For people with $\Tdiagn<\Tentry$,
+$(\Tmal,\Treg,\Tdist,\Tdiagn)$ is redrawn jointly until $\Tdiagn\ge\Tentry$ or
+there is no diagnosis; likewise $\Tdo$ is redrawn while $\Tdo<\Tentry$ (possible
+only under the archival tail). This rejection step samples the law of the
+natural history conditional on eligibility at entry exactly. The archival code
+does not condition: it keeps people diagnosed before entry (they count as
+incident in \code{lung\_inc}) and flags people who died before entry
+(Section~\ref{sec:assembly}).
 
 \paragraph{Mortality tables (Sections~\ref{sec:oc}--\ref{sec:lc}).} Each table
 $F$ ($F_k$ or $G_k$), with knots $\tau_0<\dots<\tau_J$ and $\bar F = 1-F$, is
@@ -181,8 +203,8 @@ lookup lags them by about one cell (Section~\ref{sec:oc}): about 0.01 in
 cumulative probability early in follow-up and under 0.002 after 8 years. Between
 knots the \code{fastMILC} density is piecewise exponential and the archival
 density piecewise uniform; the two differ by $O(\lambda_j\Delta_j)$ within a
-cell. Apart from the maximum age $M$, these are the only intended differences
-in distribution from the archival code.
+cell. Apart from the maximum age $M$ and the entry condition, these are the
+only intended differences in distribution from the archival code.
 
 \section{Notation and covariates}\label{sec:notation}
 
@@ -364,7 +386,9 @@ with a point mass at 150 for the $u$ whose root is beyond~150.
 
 \paragraph{Property of the archival model.} $\Tmal$ is drawn from birth and is
 \emph{not} conditioned on $\Tmal > \Tentry$. Individuals may enter with a
-prevalent malignancy, and possibly with $\Tdiagn<\Tentry$.
+prevalent malignancy, and possibly with $\Tdiagn<\Tentry$. \code{fastMILC}
+keeps prevalent undiagnosed malignancies but conditions on $\Tdiagn\ge\Tentry$
+(entry condition, Section~\ref{sec:fastmilc}).
 
 \section{Tumor growth and disease progression}\label{sec:progression}
 
@@ -433,13 +457,6 @@ distribution. One quirk:
   constraint $\Vreg<\Vdist$ then truncating heavily. We have not been able to
   check which code the calibration used.
 \end{enumerate}
-The current \code{Population} class draws $\Vdist$ by a quantile shift
-($u' = u_{\mathrm{reg}} + u(1-u_{\mathrm{reg}})$ applied to the $\Vdist$
-quantile function). That shift gives the conditional law of $\Vdist$ given
-$\Vdist > \Vreg$ only when $\Vreg$ and $\Vdist$ have the same distribution. It
-also replaces truncation by setting out-of-bounds values to \code{NA}. Neither
-matches \eqref{eq:truncset}.
-
 \section{Death from other causes}\label{sec:oc}
 
 \subsection{Tabulated input}
@@ -554,8 +571,18 @@ $G_k(0)$ is handled through the nearest-value lookup between the knots at 0.
 \]
 $\mathrm{excl}=1$ flags individuals who died before entry. This happens through
 $\Tdl$ when $\Tdiagn < \Tentry$ (Section~\ref{sec:onset}), and through the
-archival other-cause tail when $\Tentry > 110-\tau^{\max}_k$ ($M-\tau^{\max}_k$
-in \code{fastMILC}); the analyst excludes them.
+archival other-cause tail when $\Tentry > 110-\tau^{\max}_k$; the analyst
+excludes them.
+
+\paragraph{fastMILC.} After the entry condition (Section~\ref{sec:fastmilc}),
+nobody dies or is diagnosed before entry, so there is no exclusion flag.
+$\Tdeath$ and the cause follow \code{nat\_hist}. Follow-up ends at
+$\min(\Tdeath, M)$; a person alive at $M$ has no recorded death. Onset, the
+stage transitions and diagnosis are recorded only if they occur before the end
+of follow-up (stage and diameter at diagnosis likewise); those before entry are
+kept. $\Tdo$ and $\Tdl$ are kept as latent times. There is no prediction period
+$\Delta_{\mathrm{pred}}$: incidence and mortality within any window after entry
+follow from the recorded ages.
 
 \section{Discrepancies between IJM and the archival code}\label{sec:discrepancies}
 

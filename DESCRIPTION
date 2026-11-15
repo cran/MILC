@@ -42,6 +42,7 @@ Collate:
     'generate-death-other.R'
     'generate-death-cancer.R'
     'generate-onset.R'
+    'generate-progression.R'
     'Population-class.R'
     'utils-onLoad.R'
     'data.R'

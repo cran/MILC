@@ -20,15 +20,20 @@ non-smoking; while smoking \eqn{\gamma\kappa(q)}.}
 \item{smoking_dose_coefficient, smoking_dose_exponent}{\eqn{\alpha_1,
     \alpha_2} in \eqn{\kappa(q) = 1 + \alpha_1 q^{\alpha_2}}, \eqn{q}
 cigarettes per day.}
-\item{tumor_logvolume_min, tumor_logvolume_max, tumor_growth_scale,
-tumor_growth_shape, tumor_logvolume_regional_mean,
-tumor_logvolume_regional_sd, tumor_logvolume_distal_mean,
-tumor_logvolume_distal_sd, tumor_logvolume_diagnosis_mean,
-tumor_logvolume_diagnosis_sd}{progression parameters (provisional).}
+\item{tumor_growth_rate}{\eqn{m}, Gompertz scale parameter (per day).}
+\item{volume_diagnosis_meanlog, volume_diagnosis_sdlog}{log-normal
+parameters of the tumor volume (ml) at diagnosis (archival \code{cdiagn}).}
+\item{volume_regional_meanlog, volume_regional_sdlog}{archival \code{creg}.}
+\item{volume_distant_meanlog, volume_distant_sdlog}{archival \code{cdist}. As
+in the archival code, \code{\link[=generate_progression]{generate_progression()}} draws the volume at the
+start of the regional stage with \code{cdist} and at the start of the
+distant stage with \code{creg}.}
 }
+Progression values are the posterior medians of Chrysanthopoulou (2017),
+Table 2, with location = scale.
 }
 \source{
-Archival MILC 1.0 (Chrysanthopoulou, 2014), \code{HT_mal}.
+Archival MILC 1.0 (Chrysanthopoulou, 2014), \code{HT_mal}, \code{t_prog}.
 }
 \usage{
 deterministic_params
