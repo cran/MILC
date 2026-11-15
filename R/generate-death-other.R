@@ -139,16 +139,18 @@ draw_step_first_arrival <- function(rates, row, n, chunk_size) {
 #' time from the tail rule:
 #' \describe{
 #'   \item{`"archival"` (default)}{`age_entry + U * (max_age - age_entry -
-#'     horizon)`, i.e. `Unif(age_entry, max_age - horizon)`, exactly as coded in
-#'     the archival `tdeath_other`. This overlaps the tabulated window. For
+#'     horizon)`, i.e. `Unif(age_entry, max_age - horizon)`, the formula of the
+#'     archival `tdeath_other`. This overlaps the tabulated window. For
 #'     `age_entry > max_age - horizon` the width is negative and the age at
 #'     death precedes entry, as in the archival code (whose `nat_hist` then
 #'     excludes the record).}
 #'   \item{`"corrected"`}{`Unif(age_entry + horizon, max_age)`, the presumably
-#'     intended rule.}
+#'     intended rule. For `age_entry + horizon > max_age` the draw exceeds
+#'     `max_age` (with a warning).}
 #' }
-#' The model parameters were calibrated under the archival rule
-#' (`model_description/model.tex`, Sections 2 and 6).
+#' The archival code uses `max_age = 110`; fastMILC uses the package option
+#' `milc.max_age` (100). The model parameters were calibrated under the archival
+#' rule (`model_description/model.tex`, Sections 2 and 6).
 #'
 #' @param age_entry numeric vector, age at entry (years). Fixes the age group of
 #'   the table for the whole follow-up (archival).
@@ -158,14 +160,15 @@ draw_step_first_arrival <- function(rates, row, n, chunk_size) {
 #' @param intensity numeric vector, cigarettes per day at entry; used for
 #'   current smokers only.
 #' @param tail `"archival"` or `"corrected"`.
-#' @param max_age upper age of the tail rule (archival: 110).
+#' @param max_age upper age of the tail rule; default `getOption("milc.max_age")`
+#'   (100). The archival code uses 110.
 #' @param rates the rate table, default [rates_death_other].
 #' @param chunk_size maximum number of rows per [nhppp::vdraw_sc_step()] call.
 #' @return numeric vector, age at death from other causes.
 #' @export
 generate_death_other <- function(age_entry, sex, smoking_status, intensity,
                                  tail = c("archival", "corrected"),
-                                 max_age = 110,
+                                 max_age = getOption("milc.max_age"),
                                  rates = fastMILC::rates_death_other,
                                  chunk_size = 1e5L) {
   tail <- match.arg(tail)
@@ -206,6 +209,12 @@ generate_death_other <- function(age_entry, sex, smoking_status, intensity,
     a <- age_entry[in_tail]
     h <- st$horizon[in_tail]
     u <- stats::runif(sum(in_tail))
+    if (tail == "corrected" && any(a + h > max_age)) {
+      warning(
+        sum(a + h > max_age), " tail draw(s) with age_entry + horizon > max_age; ",
+        "the corrected tail Unif(age_entry + horizon, max_age) is then reversed"
+      )
+    }
     age[in_tail] <- switch(
       tail,
       archival = a + u * (max_age - (a + h)),

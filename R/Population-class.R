@@ -463,13 +463,11 @@ Population <- R6::R6Class(
       }
       private$.rng_stream$activateStream("death_from_lung_cancer")
 
-      private$.population[, age_dead_from_lung_cancer := NA_real_]
-      private$.population[
-        !is.na(age_at_disease_onset),
-        age_dead_from_lung_cancer := runif(
-          n = .N,
-          min = age_at_disease_onset,
-          max = getOption("milc.max_age")
+      private$.population[,
+        age_dead_from_lung_cancer := generate_death_cancer(
+          age_diagnosis = age_at_diagnosis,
+          stage = stage_at_diagnosis,
+          sex = sex
         )
       ]
       private$.population[,
@@ -565,7 +563,7 @@ Population <- R6::R6Class(
             private$.population[,
               (index_var) := fifelse(
                 get(index_var) %between%
-                  .(age_at_regional_disease, age_dead_from_other_causes),
+                  .(age_at_diagnosis, age_dead_from_other_causes),
                 get(index_var),
                 NA
               )

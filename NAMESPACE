@@ -2,6 +2,7 @@
 
 export(Population)
 export(RNGStreams)
+export(generate_death_cancer)
 export(generate_death_other)
 export(remove_lecuyer)
 import(data.table)

@@ -72,25 +72,27 @@ test_that("stratum lookup maps labels and rejects unknown strata", {
   expect_error(death_other_stratum(120, "male", "never", 0), "No other-cause")
 })
 
-test_that("corrected tail: window reproduces the table, tail is Unif(a+h, 110)", {
+test_that("corrected tail: window reproduces the table, tail is Unif(a+h, M)", {
+  M <- getOption("milc.max_age")
   set.seed(20261115)
   n <- 2e5L
-  age <- 82
+  age <- 70
   row <- death_other_stratum(age, "male", "never", 0)
   h <- rates_death_other$strata$horizon[row]
   x <- draw_one_stratum(n, age, "male", "never", 0, tail = "corrected") - age
   t <- c(0.5, 1, 2, 4, 8, 12, 16)
   expect_cdf(x, t, rate_cdf(rates_death_other, row, t))
   tail <- x[x > h]
-  expect_true(all(tail <= 110 - age))
+  expect_true(all(tail <= M - age))
   F_max <- rates_death_other$strata$F_max[row]
   expect_cdf(
     x, h + c(2, 6, 10),
-    F_max + (1 - F_max) * c(2, 6, 10) / (110 - age - h)
+    F_max + (1 - F_max) * c(2, 6, 10) / (M - age - h)
   )
 })
 
-test_that("archival tail: mixture of the table and Unif(a, 110 - h)", {
+test_that("archival tail: mixture of the table and Unif(a, M - h)", {
+  M <- getOption("milc.max_age")
   set.seed(20261116)
   n <- 2e5L
   age <- 42
@@ -98,9 +100,9 @@ test_that("archival tail: mixture of the table and Unif(a, 110 - h)", {
   h <- rates_death_other$strata$horizon[row]
   F_max <- rates_death_other$strata$F_max[row]
   x <- draw_one_stratum(n, age, "female", "never", 0) - age
-  expect_true(all(x > 0 & x <= 110 - h - age))
+  expect_true(all(x > 0 & x <= M - h - age))
   t <- c(1, 4, 8, 16, 30, 50)
-  target <- (1 - F_max) * pmin(1, t / (110 - age - h))
+  target <- (1 - F_max) * pmin(1, t / (M - age - h))
   target[t <= h] <- target[t <= h] + rate_cdf(rates_death_other, row, t[t <= h])
   target[t > h] <- target[t > h] + F_max
   expect_cdf(x, t, target)
@@ -108,10 +110,15 @@ test_that("archival tail: mixture of the table and Unif(a, 110 - h)", {
 
 test_that("archival tail reproduces death before entry for late entry", {
   set.seed(1)
-  x <- draw_one_stratum(2e4L, 100, "male", "never", 0)
-  # 110 - 16 = 94 < 100: archival tail draws fall in (94, 100)
-  expect_true(any(x < 100))
-  expect_true(all(x > 94 - 1e-12))
+  M <- getOption("milc.max_age")
+  x <- draw_one_stratum(2e4L, 95, "male", "never", 0)
+  # M - 16 < 95: archival tail draws fall in (M - 16, 95)
+  expect_true(any(x < 95))
+  expect_true(all(x > M - 16 - 1e-12))
+  expect_warning(
+    draw_one_stratum(100L, 95, "male", "never", 0, tail = "corrected"),
+    "reversed"
+  )
 })
 
 test_that("terminal-certain stratum: no tail, uniform in the terminal cell", {

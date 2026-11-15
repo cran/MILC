@@ -40,6 +40,7 @@ Collate:
     'utils-validate_recipe.R'
     'utils-validate_population.R'
     'generate-death-other.R'
+    'generate-death-cancer.R'
     'Population-class.R'
     'utils-onLoad.R'
     'data.R'

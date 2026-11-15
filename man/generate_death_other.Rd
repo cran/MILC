@@ -10,7 +10,7 @@ generate_death_other(
   smoking_status,
   intensity,
   tail = c("archival", "corrected"),
-  max_age = 110,
+  max_age = getOption("milc.max_age"),
   rates = fastMILC::rates_death_other,
   chunk_size = 100000L
 )
@@ -29,7 +29,8 @@ current smokers only.}
 
 \item{tail}{\code{"archival"} or \code{"corrected"}.}
 
-\item{max_age}{upper age of the tail rule (archival: 110).}
+\item{max_age}{upper age of the tail rule; default \code{getOption("milc.max_age")}
+(100). The archival code uses 110.}
 
 \item{rates}{the rate table, default \link{rates_death_other}.}
 
@@ -52,14 +53,16 @@ uniform time in the terminal cell \verb{[terminal_lo, horizon]}. Otherwise,
 individuals with no event in the window (probability \code{1 - F_max}) get a
 time from the tail rule:
 \describe{
-\item{\code{"archival"} (default)}{\code{age_entry + U * (max_age - age_entry - horizon)}, i.e. \code{Unif(age_entry, max_age - horizon)}, exactly as coded in
-the archival \code{tdeath_other}. This overlaps the tabulated window. For
+\item{\code{"archival"} (default)}{\code{age_entry + U * (max_age - age_entry - horizon)}, i.e. \code{Unif(age_entry, max_age - horizon)}, the formula of the
+archival \code{tdeath_other}. This overlaps the tabulated window. For
 \code{age_entry > max_age - horizon} the width is negative and the age at
 death precedes entry, as in the archival code (whose \code{nat_hist} then
 excludes the record).}
 \item{\code{"corrected"}}{\code{Unif(age_entry + horizon, max_age)}, the presumably
-intended rule.}
+intended rule. For \code{age_entry + horizon > max_age} the draw exceeds
+\code{max_age} (with a warning).}
 }
-The model parameters were calibrated under the archival rule
-(\code{model_description/model.tex}, Sections 2 and 6).
+The archival code uses \code{max_age = 110}; fastMILC uses the package option
+\code{milc.max_age} (100). The model parameters were calibrated under the archival
+rule (\code{model_description/model.tex}, Sections 2 and 6).
 }
