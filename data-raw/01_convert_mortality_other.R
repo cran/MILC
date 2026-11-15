@@ -1,112 +1,43 @@
-ARCHIVE <- "archival_code/data"
-load(file.path(ARCHIVE, "current.other.rda"))
-load(file.path(ARCHIVE, "former.other.rda"))
-load(file.path(ARCHIVE, "never.other.rda"))
+# Death from other causes: archival CIF tables -> nhppp step-rate inputs.
+#
+# Clock: years since entry. Stratum: (smoking status at entry, age group at
+# entry, sex, intensity group for current smokers). The table is fixed by the
+# age group at entry for the whole follow-up (archival behavior).
+# Run from the package root: Rscript data-raw/01_convert_mortality_other.R
 
-source(file.path('data-raw', "00_convert_mortality_functions.R"))
+library(data.table)
+source(file.path("data-raw", "00_convert_mortality_functions.R"))
 
-# Current smokers, other causes of death
-source_list <- current.other
-fields <- parse_CIF_names_other_deaths(source_list = source_list)
-results <- list()
-for (nx in names(source_list)) {
-  results[[nx]] <- parse_CIF_dat_other_deaths(
-    cif = source_list[[nx]],
-    starting_age = as.numeric(substr(fields[[nx]][1], 1, 2)),
-    sex_str = fields[[nx]][2],
-    smoking_status_str = "current",
-    smoking_intensity_str = fields[[nx]][3],
-    outcome = "death_from_other_causes"
+ARCHIVE <- file.path("archival_code", "data")
+env <- new.env()
+for (f in c("never.other", "former.other", "current.other")) {
+  load(file.path(ARCHIVE, paste0(f, ".rda")), envir = env)
+}
+
+# Archival names: "<agegrp> <sex> never dead, other",
+# "<agegrp> <sex> former dead, other", "<agegrp> <sex> <intensity> cigs dead, other".
+parse_other_names <- function(nm, smoking_status) {
+  parts <- strsplit(nm, " ", fixed = TRUE)
+  data.table(
+    smoking_status = smoking_status,
+    agegrp = vapply(parts, `[`, "", 1L),
+    sex = vapply(parts, `[`, "", 2L),
+    intensity = if (smoking_status == "current") {
+      vapply(parts, `[`, "", 3L)
+    } else {
+      NA_character_
+    }
   )
 }
-OC <- rbindlist(results)
 
+tables <- c(env$never.other, env$former.other, env$current.other)
+keys <- rbindlist(list(
+  parse_other_names(names(env$never.other), "never"),
+  parse_other_names(names(env$former.other), "former"),
+  parse_other_names(names(env$current.other), "current")
+))
+stopifnot(!anyDuplicated(keys))
 
-# Former smokers, other causes of death
-source_list <- former.other
-fields <- parse_CIF_names_other_deaths(source_list = source_list)
-results <- list()
-for (nx in names(source_list)) {
-  results[[nx]] <- parse_CIF_data_other_deaths(
-    cif = source_list[[nx]],
-    starting_age = as.numeric(substr(fields[[nx]][1], 1, 2)),
-    sex_str = fields[[nx]][2],
-    smoking_status_str = "former",
-    smoking_intensity_str = fields[[nx]][3],
-    outcome = "death_from_other_causes"
-  )
-}
-OF <- rbindlist(results)
+rates_death_other <- build_rate_table(tables, keys, time_per_year = 1)
 
-## never smokers, other causes of death
-source_list <- never.other
-fields <- parse_CIF_names_other_deaths(source_list = source_list)
-results <- list()
-for (nx in names(source_list)) {
-  results[[nx]] <- parse_CIF_data_other_deaths(
-    cif = source_list[[nx]],
-    starting_age = as.numeric(substr(fields[[nx]][1], 1, 2)),
-    sex_str = fields[[nx]][2],
-    smoking_status_str = "never",
-    smoking_intensity_str = fields[[nx]][3],
-    outcome = "death_from_other_causes"
-  )
-}
-ON <- rbindlist(results)
-
-#### Other causes of death:
-#### The original MILC notation conflates age and time intervals.
-#### Thus the tables include different information for the same age
-#### when all are put together.
-#### We will use all overlapping information on ages; and average
-#### the entries where available
-death_other <- rbindlist(list(OF, OC, ON))
-death_other[, interval := NULL]
-setkey(death_other, age, sex, smoking_status, smoking_intensity)
-death_other[,
-  group_id := .GRP,
-  by = .(age, sex, smoking_status, smoking_intensity)
-]
-death_other <- death_other[,
-  .(
-    age = first(age),
-    sex = first(sex),
-    smoking_status = first(smoking_status),
-    smoking_intensity = first(smoking_intensity),
-    outcome = first(outcome),
-    lambda = mean(lambda, rm.na = TRUE)
-  ),
-  by = group_id
-]
-
-# death from other causes by 0.25 years of age
-death_other_x0.25 <- dcast(
-  death_other,
-  sex + smoking_status + smoking_intensity ~ age,
-  value.var = 'lambda'
-)
-
-# death from other causes by 1 years of age
-death_other[, age := floor(age)][, group_id := NULL]
-setkey(death_other, age, sex, smoking_status, smoking_intensity)
-
-
-death_other <- death_other[,
-  .(
-    # age = first(age),
-    # sex = first(sex),
-    # smoking_status = first(smoking_status),
-    # smoking_intensity = first(smoking_intensity),
-    outcome = first(outcome),
-    lambda = mean(lambda, rm.na = TRUE)
-  ),
-  by = .(age, sex, smoking_status, smoking_intensity)
-]
-
-death_other_x1 <- dcast(
-  death_other,
-  sex + smoking_status + smoking_intensity ~ age,
-  value.var = 'lambda'
-)
-
-use_data(death_other_x1, death_other_x0.25, overwrite = TRUE)
+usethis::use_data(rates_death_other, overwrite = TRUE)

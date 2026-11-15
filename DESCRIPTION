@@ -41,3 +41,4 @@ Collate:
     'utils-validate_population.R'
     'Population-class.R'
     'utils-onLoad.R'
+    'data.R'
