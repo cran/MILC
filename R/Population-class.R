@@ -241,10 +241,12 @@ Population <- R6::R6Class(
       #browser()
 
       private$.population[,
-        age_dead_from_other_causes := runif(
-          n = .N,
-          min = spawn_age,
-          max = getOption("milc.max_age")
+        age_dead_from_other_causes := generate_death_other(
+          age_entry = spawn_age,
+          sex = sex,
+          smoking_status = smoking_status_at_spawn_age,
+          intensity = smoking_intensity_at_spawn_age,
+          tail = getOption("milc.death_other_tail")
         )
       ]
 

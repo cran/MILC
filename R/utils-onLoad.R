@@ -7,6 +7,7 @@
     milc.exp_max = log(.Machine$double.xmax) - log(10^15),
 
     milc.max_age = 100, # years
+    milc.death_other_tail = "archival", # or "corrected"; see generate_death_other()
 
     milc.globalRNG.seed = NULL,
     milc.antithetic = FALSE,
