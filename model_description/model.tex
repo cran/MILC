@@ -1,0 +1,556 @@
+\documentclass[11pt]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{enumitem}
+\usepackage[colorlinks=true,linkcolor=blue,citecolor=blue,urlcolor=blue]{hyperref}
+
+\newcommand{\code}[1]{\texttt{#1}}
+\emergencystretch=3em
+\newcommand{\Unif}{\operatorname{Unif}}
+\newcommand{\LN}{\operatorname{log\text{-}Normal}}
+\newcommand{\ag}{\operatorname{ag}}
+\newcommand{\dg}{\operatorname{dg}}
+\newcommand{\sex}{g}
+\newcommand{\Tentry}{T_{\mathrm{entry}}}
+\newcommand{\Tmal}{T_{\mathrm{mal}}}
+\newcommand{\Treg}{T_{\mathrm{reg}}}
+\newcommand{\Tdist}{T_{\mathrm{dist}}}
+\newcommand{\Tdiagn}{T_{\mathrm{diagn}}}
+\newcommand{\Tdo}{T_{d\_\mathrm{other}}}
+\newcommand{\Tdl}{T_{d\_\mathrm{lung}}}
+\newcommand{\Tdeath}{T_{\mathrm{death}}}
+\newcommand{\Tpred}{T_{\mathrm{pred}}}
+\newcommand{\Tfinal}{T_{\mathrm{final}}}
+\newcommand{\Vreg}{V_{\mathrm{reg}}}
+\newcommand{\Vdist}{V_{\mathrm{dist}}}
+\newcommand{\Vdiagn}{V_{\mathrm{diagn}}}
+\newcommand{\ns}{\mathrm{ns}}
+\newcommand{\sm}{\mathrm{s}}
+
+\title{The MILC natural-history model:\\ mathematics, archival sampler, and the fastMILC implementation}
+\author{fastMILC working notes}
+\date{Draft of 15 November 2026}
+
+\begin{document}
+\maketitle
+
+\section{Scope and sources}
+
+This note states the MILC (MIcrosimulation Lung Cancer) natural-history model
+as a set of random variables and the formulas that generate them. For each
+component we give (a) the model as a probability statement, (b) the sampler in
+the archival R package \code{MILC} 1.0 \cite{milc2014} (files under
+\code{archival\_code/R/}), and (c) the quirks of that sampler.
+Section~\ref{sec:fastmilc} summarizes how \code{fastMILC} samples each component
+and where it departs from the archival sampler.
+
+We distinguish three things throughout: the model (a distribution), the archival
+sampler (an algorithm that draws from an approximation of that distribution),
+and the \code{fastMILC} sampler.
+
+\paragraph{Sources and notation.} The primary description of the model is
+Chrysanthopoulou (2017) \cite{ijm2017}, cited below as IJM. We use its notation
+where it has one (the TSCE parameters, $q(t)$, the Gompertz and log-normal
+parameters, and the names $\Tmal$, $\Treg$, $\Tdist$, $\Tdiagn$,
+$d_{\mathrm{diagn}}$, $\Tdeath$). Where IJM has no symbol, we use the
+archival variable name ($\Tentry$, $\Tpred$, $\Tfinal$) or introduce one
+($\zeta$, $z(t)$, $\psi$, $\rho$, $\kappa$, $\ag$, $\dg$, $F_k$, $G_k$).
+IJM uses $\theta$ for the whole model-parameter vector, so we use $\psi$ for the
+TSCE parameter set. Chrysanthopoulou et al.\ (2021) \cite{mdm2021} describe the
+calibration of $(m,\mu_{\mathrm{reg}},\mu_{\mathrm{dist}},\mu_{\mathrm{diagn}})$.
+Nanayakkara et al.\ (2024) \cite{nz2024} describe a modified variant (hazard
+ratios by years since quitting; mortality not stratified by smoking) and are
+cited only for parameter comparisons. Section~\ref{sec:discrepancies} lists
+where IJM and the archival code disagree.
+
+\section{The fastMILC implementation}\label{sec:fastmilc}
+
+This section uses symbols defined in Sections~\ref{sec:notation}--\ref{sec:lc}.
+
+\paragraph{Reference implementation.} The archival code is the reference
+implementation. Where IJM differs from it, in a number or in model structure,
+\code{fastMILC} follows the archival code; Section~\ref{sec:discrepancies}
+records each difference. Each component is drawn for all individuals at once
+over a \code{data.table} population, with one L'Ecuyer random-number stream per
+component, using the samplers of \code{nhppp} (development version 1.0.5.9002).
+
+\paragraph{Onset (Section~\ref{sec:onset}).} $\Tmal$ is drawn from birth, not
+conditioned on $\Tmal>\Tentry$, with \code{vdraw\_cumulative\_intensity}
+(\code{atmost1 = TRUE}) on $[0,110]$ and the closed-form $\Lambda_{\mathrm{mal}}$
+of \eqref{eq:lambdaM}. $\Lambda_{\mathrm{mal}}$ has no closed-form inverse, so the
+inverse is computed by Newton's method, vectorized over all individuals. For
+each individual we select the smoking segment $j$ by comparing the target $z$
+with $\Lambda_{\mathrm{mal}}(t_s)$ and $\Lambda_{\mathrm{mal}}(t_q)$, form the local
+target $z' = z - \Lambda_{\mathrm{mal}}(b_j) + \tilde H_{\psi_j}(b_j)$ with
+\[
+\tilde H_\psi(t) = H_\psi(t)-H_\psi(0)
+ = K\Big[-t + B^{-1}\operatorname{log1p}\big\{B(e^{ct}-1)/c\big\}\Big],
+\]
+which avoids the cancellation in \eqref{eq:Htsce}, and iterate
+$t \leftarrow t - \{\tilde H_{\psi_j}(t)-z'\}/h_{\psi_j}(t)$ from the segment's
+right end. $\tilde H_\psi$ is increasing and convex, so these iterates decrease
+monotonically to the root; rows not converged after an iteration cap (roots near
+$t=0$, where $h\approx 0$) fall back to vectorized bisection. This is the same
+inverse-CDF map as the archival \code{t\_mal}. No event in $[0,110]$ gives
+\code{NA}, where the archival code returns 150; no outcome changes.
+
+\paragraph{Progression (Section~\ref{sec:progression}).} The volume thresholds
+are drawn exactly from the truncated law on $\mathcal A$ \eqref{eq:truncset}:
+$\Vdiagn$ by inverse CDF of its truncated log-normal, $(\Vreg,\Vdist)$ by
+vectorized rejection that redraws only rejected rows. As in the archival code,
+$\mu_\bullet=\mathrm{sd}_\bullet$, and $\Vreg$ is drawn with the parameter vector
+named \code{cdist} and $\Vdist$ with the one named \code{creg}.
+
+\paragraph{Mortality tables (Sections~\ref{sec:oc}--\ref{sec:lc}).} Each table
+$F$ ($F_k$ or $G_k$), with knots $\tau_0<\dots<\tau_J$ and $\bar F = 1-F$, is
+converted to a piecewise-constant intensity on its own irregular knots,
+\begin{equation}\label{eq:steplambda}
+\lambda_j = \frac{\log \bar F(\tau_j) - \log \bar F(\tau_{j+1})}{\tau_{j+1}-\tau_j},\qquad j=0,\dots,J-1,
+\end{equation}
+and sampled with \code{vdraw\_sc\_step} (\code{atmost1 = TRUE}), once per stratum
+with that stratum's knot vector. The first arrival $\tilde\tau$ satisfies
+$\Pr(\tilde\tau\le\tau_j) = 1-\bar F(\tau_j)/\bar F(\tau_0)$ at every knot,
+exactly. Each cause has its own independent latent time, as in the archival
+code, and $\Tdeath=\min(\Tdo,\Tdl)$. Further details:
+\begin{itemize}[nosep]
+\item The lung atom $G_k(0)$ is merged into the first cell,
+  $\lambda_0 = -\log\{1-G_k(\tau_1)\}/\tau_1$ on $[0,\tau_1)$, so $G_k$ is
+  reproduced at every knot from $\tau_1$ on. The archival lookup also does not
+  produce deaths at zero duration. The atom is probably death within the month of
+  diagnosis (SEER survival months $=0$); we have not verified this.
+\item In a terminal cell with $\bar F(\tau_J)=0$ (lung ``distant NA male'';
+  other-cause ``current, >85, female, 21+''), \eqref{eq:steplambda} is infinite;
+  individuals who reach that cell get a uniform time within it, as in the archival
+  code.
+\item Other causes: the clock is time since entry and the table is fixed by the
+  age group at entry. With probability $1-F_k(\tau^{\max}_k)$ there is no event
+  in the window, and $\Tdo$ is drawn from the archival tail
+  $\Unif(\Tentry,\,110-\tau^{\max}_k)$. An option gives the presumably intended
+  $\Unif(\Tentry+\tau^{\max}_k,\,110)$ as a model variant. The default is the
+  archival rule because $(m,\mu_{\mathrm{reg}},\mu_{\mathrm{dist}},\mu_{\mathrm{diagn}})$
+  were calibrated under it. The two differ substantially: for never smokers aged
+  40--44 (female) the tail applies to 98.5\%, and for entry at 42 the mean ages
+  at other-cause death are 68 and 84.
+\item Lung cancer: death is possible after diagnosis at any stage; the stratum
+  is stage $\times$ age group at diagnosis $\times$ sex, with the literal ``NA''
+  fallback strata; the residual mass $1-G_k(\tau^{\max}_k)$ is a point mass of
+  lung-cancer death at $\Tdiagn+\tau^{\max}_k/12$, as in the archival code.
+\end{itemize}
+
+\paragraph{Departures from the archival sampler.} Within the tabulated windows
+\code{fastMILC} draws from the tables exactly, while the archival nearest-value
+lookup lags them by about one cell (Section~\ref{sec:oc}): about 0.01 in
+cumulative probability early in follow-up and under 0.002 after 8 years. Between
+knots the \code{fastMILC} density is piecewise exponential and the archival
+density piecewise uniform; the two differ by $O(\lambda_j\Delta_j)$ within a
+cell. These are the only intended differences in distribution from the archival
+code.
+
+\section{Notation and covariates}\label{sec:notation}
+
+All event times are ages in years on the attained-age scale (time since birth),
+unless marked as a duration with~$\tau$. Quantities refer to one individual; we
+omit the subscript~$i$.
+
+\begin{center}
+\small
+\begin{tabular}{@{}lll@{}}
+\toprule
+Symbol & Meaning & Archival name \\
+\midrule
+$\Tentry$ & age at entry & \code{T\_entry}, \code{age\_curr} \\
+$\sex \in \{\text{male},\text{female}\}$ & sex & \code{gender} \\
+$\zeta \in \{\text{never},\text{former},\text{current}\}$ & smoking status at entry & \code{status} \\
+$t_s,\ t_q$ & ages at starting, quitting smoking; $t_q=\infty$ if current & \code{ts}, \code{tq} \\
+$q$, $q(t)$ & cigarettes per day while smoking; at age $t$ (IJM) & \code{d} \\
+$\Tmal$ & age at onset of the first malignant cell & \code{T\_mal} \\
+$\Treg,\ \Tdist$ & ages at onset of regional, distant stage & \code{T\_reg}, \code{T\_dist} \\
+$\Tdiagn$, $d_{\mathrm{diagn}}$ & age and tumor diameter at diagnosis & \code{T\_diagn}, \code{D\_diagn} \\
+$\mathrm{stage}$ & stage at diagnosis, $\in\{\text{localized},\text{regional},\text{distant}\}$ & \code{stage} \\
+$\Tdo,\ \Tdl$ & latent ages at death, other causes and lung cancer & \code{T\_do}, \code{T\_dl} \\
+$\Tdeath$ & age at death, $\min(\Tdo,\Tdl)$ & \code{T\_death} \\
+$\Delta_{\mathrm{pred}}$; $\Tpred$ & prediction period (years); $\Tentry+\Delta_{\mathrm{pred}}$ & \code{pred\_yrs}; \code{T\_pred} \\
+\bottomrule
+\end{tabular}
+\end{center}
+IJM writes $T_{d\_\mathrm{other}}$ and $T_{d\_\mathrm{lung}}$ in its simulation
+algorithm (Table A.1), and $q(t)$ for the intensity at age $t$. In the archival
+model the intensity is constant while smoking, so $q(t) = q$ on $[t_s,t_q)$.
+
+\paragraph{Stratifying functions.} The mortality tables are indexed by two
+grouping functions. The age-group function is
+\[
+\ag(x) =
+\begin{cases}
+\text{``$<40$''} & x < 40,\\
+\text{``}5j\text{--}(5j+4)\text{''} & 5j \le x < 5j+5,\quad j=8,\dots,16,\\
+\text{``$>85$''} & x \ge 85.
+\end{cases}
+\]
+The values of $\ag$ are the archival string labels, which must match the keys of
+the mortality tables; the label ``>85'' denotes the band $x\ge 85$. In the
+archival \code{age\_grp}, $x=120$ exactly returns \code{NA} (an empty
+\code{which()} gives index \code{Inf}), which routes that age to the ``NA''
+fallback strata of Section~\ref{sec:lc}. The intensity-group function is
+$\dg(q)=$ ``1--10'' for $1\le q<11$, ``11--20'' for $11\le q<21$, ``21+'' for
+$q\ge 21$ (and the label ``NA'' for $q<1$).
+
+\section{Onset of the first malignant cell: TSCE model}\label{sec:onset}
+
+\subsection{Model}
+
+$\Tmal$ is the first arrival time of a nonhomogeneous Poisson process on
+$[0,\infty)$ (age from birth) with intensity $\lambda_{\mathrm{mal}}(t)$, so that
+\[
+\Pr(\Tmal > t) = \exp\{-\Lambda_{\mathrm{mal}}(t)\}, \qquad
+\Lambda_{\mathrm{mal}}(t)=\int_0^t \lambda_{\mathrm{mal}}(u)\,du .
+\]
+
+\paragraph{Constant-parameter hazard.} IJM (Eq.~1, Table~1) uses the two-stage
+clonal expansion (TSCE) hazard. For a parameter set
+$\psi = (\nu,\alpha,\beta,\mu)$ (normal-cell initiation rate; division, apoptosis
+and malignant-conversion rates of initiated cells) and $X$ normal stem cells,
+define
+\[
+\gamma = \alpha-\beta-\mu, \qquad
+B = \tfrac12\left(-\gamma + \sqrt{\gamma^2 + 4\alpha\mu}\right), \qquad
+c = \gamma + 2B, \qquad
+K = \frac{\nu\mu X}{\gamma + B}.
+\]
+The hazard is
+\begin{equation}\label{eq:htsce}
+h_\psi(t) = \frac{\nu\mu X\,(e^{ct}-1)}{\gamma + B\,(e^{ct}+1)}
+          = \nu\mu X\,\frac{e^{ct}-1}{\,c + B\,(e^{ct}-1)\,},
+\end{equation}
+where the first form is IJM Eq.~1 and the second rewrites its denominator,
+$\gamma+B(e^{ct}+1) = c + B(e^{ct}-1)$. The archival code parametrizes $\psi$ by
+$(\nu,\alpha,\gamma,\mu)$ and leaves $\beta=\alpha-\mu-\gamma$ implicit. Its
+function \code{HT\_mal} returns
+\begin{equation}\label{eq:Htsce}
+H_\psi(t) = K\left[-t + \frac1B \log\!\left(\gamma + B + B e^{ct}\right)\right],
+\end{equation}
+and $H_\psi'(t) = K\left[-1 + c\,e^{ct}/(\gamma+B+Be^{ct})\right] = h_\psi(t)$,
+because $c e^{ct} - (\gamma+B+Be^{ct}) = (\gamma+B)(e^{ct}-1)$. We also checked
+this against a numerical derivative of the archival \code{HT\_mal} (agreement to six
+significant digits over ages 1--85). Three properties follow from
+\eqref{eq:htsce} and are used later:
+\begin{enumerate}[nosep]
+\item $h_\psi(0)=0$; but $H_\psi(0) = (K/B)\log c \neq 0$, so only differences
+  $H_\psi(b)-H_\psi(a)$ are cumulative intensities. (The archival code uses
+  differences, via \code{ht\_mal\_int}.)
+\item $h_\psi$ is strictly increasing in $t$: with $y=e^{ct}-1\ge 0$,
+  $y/(c+By)$ is increasing because $c>0$.
+\item $h_\psi(t) \uparrow \nu\mu X / B$ as $t\to\infty$.
+\end{enumerate}
+$H_\psi$ has no closed-form inverse: in $y=e^{ct}$, $H_\psi$ is a linear
+combination of $\log y$ and $\log(\gamma+B+By)$.
+
+\paragraph{Parametrization by sex and smoking.} Let $z(t)\in\{\ns,\sm\}$
+(non-smoker, smoker; IJM subscripts) indicate whether the individual accrues
+smoking exposure at age $t$ (archival argument \code{smok\_status} of
+\code{HT\_mal}, values \code{"N"}, \code{"Y"}):
+\[
+z(t) = \begin{cases} \sm & t_s \le t < t_q,\\ \ns & \text{otherwise.}\end{cases}
+\]
+$z$ depends on age and differs from the entry status $\zeta$: for never smokers
+$z\equiv \ns$; for current smokers $z$ switches from $\ns$ to $\sm$ at $t_s$; for
+former smokers $z$ is $\ns$, then $\sm$ on $[t_s,t_q)$, then $\ns$ again.
+
+The non-smoker parameters $(\nu_\ns,\alpha_\ns,\gamma_\ns)$ depend on sex, and
+$\mu_\ns=\nu_\ns$. For smokers (IJM Eqs.~2--3, Table~2),
+\[
+\kappa(q) = 1 + \alpha_1 q^{\alpha_2},\qquad
+\alpha_\sm = \alpha_\ns\,\kappa(q),\qquad
+\gamma_\sm = \gamma_\ns\,\kappa(q),\qquad
+\mu_\sm = \mu_\ns,\qquad
+\nu_\sm = \rho\,\nu_\ns,
+\]
+with sex-specific $(\alpha_1,\alpha_2,\rho)$. We write $\psi_\ns$ and
+$\psi_\sm(q)$ for the two parameter sets (for a given sex). IJM has no symbol for
+the initiation multiplier; we call it $\rho$. In the archival code, $\rho=1+p_4$,
+$\alpha_1 = p_5$, $\alpha_2=p_6$, $(\alpha_\ns,\gamma_\ns,\nu_\ns) = (a_0,g_0,v_0)$.
+Table~\ref{tab:tsce} compares the values. Where the sources disagree,
+\code{fastMILC} uses the archival values.
+
+\begin{table}[h]
+\centering
+\caption{TSCE parameters by source. IJM: Table~2 of \cite{ijm2017}, also used in
+\code{data-raw/10\_baseline\_model\_parameters.R}. Archival:
+\code{archival\_code/R/HT\_mal.R}. NZ: Table~A1 of \cite{nz2024}. The archival code
+also lets $\alpha_\ns$ differ between the two parameter sets for males (7.7 for
+$\psi_\ns$, 7.5 as the base of $\psi_\sm$).}\label{tab:tsce}
+\begin{tabular}{@{}l l cccccc@{}}
+\toprule
+Sex & Source & $X$ & $\nu_\ns$ & $\alpha_\ns$ & $\gamma_\ns$ & $\rho$ & $(\alpha_1,\alpha_2)$ \\
+\midrule
+male   & IJM      & ``10e+7'' & $7.16\times10^{-8}$ & 7.7  & 0.090 & 1    & (0.6, 0.22) \\
+male   & archival & $10^7$    & $7\times10^{-8}$    & 7.7 / 7.5 & 0.090 & 1.01 & (0.6, 0.22) \\
+male   & NZ       & ``10e7'' & $7.16\times10^{-8}$ & 7.7  & 0.090 & 1    & (0.6, 0.22) \\
+\midrule
+female & IJM      & ``10e+7'' & $1.07\times10^{-7}$ & 15.82 & 0.071 & 0.98 & (0.5, 0.32) \\
+female & archival & $10^7$    & $1\times10^{-7}$    & 15.5  & 0.071 & 1.02 & (0.5, 0.32) \\
+female & NZ       & ``10e7'' & $1.07\times10^{-7}$ & 15.82 & 0.071 & 1.02 & (0.5, 0.32) \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\paragraph{Smoking history.} The hazard switches between parameter sets at
+$t_s$ and $t_q$ and is evaluated on the attained-age clock in every segment
+(the clock does not restart at $t_s$ or $t_q$):
+\begin{equation}\label{eq:lambdaM}
+\lambda_{\mathrm{mal}}(t) = h_{\psi_{z(t)}}(t) =
+\begin{cases}
+h_{\psi_\ns}(t) & 0 \le t < t_s,\\
+h_{\psi_\sm(q)}(t) & t_s \le t < t_q,\\
+h_{\psi_\ns}(t) & t \ge t_q,
+\end{cases}
+\qquad
+\Lambda_{\mathrm{mal}}(t) = \sum_{j} \Big[H_{\psi_j}\big(\min(t,b_{j+1})\big) - H_{\psi_j}(b_j)\Big]_{+},
+\end{equation}
+where $0=b_0<b_1=t_s<b_2=t_q<b_3=\infty$, $\psi_j$ is the parameter set on
+segment $j$, and the sum runs over segments with $b_j<t$. Never smokers have a
+single segment; current smokers have two. After quitting, a former smoker has
+the never-smoker hazard $h_{\psi_\ns}(t)$ at attained age; past smoking affects
+$\Tmal$ only through the cumulative intensity accrued on $[t_s,t_q)$. This is
+the archival hazard, and IJM describes the same piecewise construction. It
+switches instantaneously at $t_s$ and $t_q$, whereas a TSCE model with
+piecewise-constant parameters would carry the clonal population across the
+switch and give a history-dependent hazard. We reproduce the archival form.
+
+\subsection{Archival sampler}
+\code{t\_mal} draws $u\sim\Unif(0,1)$ and solves
+$\exp\{-\Lambda_{\mathrm{mal}}(t)\}=u$ with \code{uniroot} on $[0,150]$, using $u$
+to select the segment in advance. If \code{uniroot} fails, it returns
+$\Tmal=150$. This is an exact inverse-CDF sampler up to root-finding tolerance,
+with a point mass at 150 for the $u$ whose root is beyond~150.
+
+\paragraph{Property of the archival model.} $\Tmal$ is drawn from birth and is
+\emph{not} conditioned on $\Tmal > \Tentry$. Individuals may enter with a
+prevalent malignancy, and possibly with $\Tdiagn<\Tentry$.
+
+\section{Tumor growth and disease progression}\label{sec:progression}
+
+\subsection{Model}
+Tumor volume $V(t)$ (mm$^3$) follows Gompertz growth (IJM Eq.~4) from the
+volume of one malignant cell $V_0 = \pi d_0^3/6$, $d_0=0.01$\,mm, with scale
+parameter $m$ and shape parameter $s = 31m$:
+\[
+\frac{V(t)}{V_0} = \exp\!\left\{\frac{s}{m}\left(1 - e^{-m t}\right)\right\},
+\qquad V(t) = \frac{\pi}{6}\,d(t)^3 ,
+\]
+with $t$ in days since onset (IJM does not state the unit of $m$; the archival
+code divides by 365). The time in years from onset to volume $v$ is the inverse
+(\code{t\_vol}):
+\begin{equation}\label{eq:tvol}
+\tau(v) = -\frac{1}{365\,m}\log\!\left(1 - \frac{m}{s}\log\frac{v}{V_0}\right)
+        = -\frac{1}{365\,m}\log\!\left(1 - \frac{1}{31}\log\frac{v}{V_0}\right),
+\end{equation}
+defined for $\log(v/V_0) < 31$. The maximum volume
+$V_{\max}=\pi d_{\max}^3/6$, $d_{\max}=130$\,mm, gives $\log(V_{\max}/V_0)\approx 28.4$.
+
+Three volume thresholds are random (IJM Table~1):
+\[
+\Vreg = 1000\,Z_{\mathrm{reg}},\quad \Vdist = 1000\,Z_{\mathrm{dist}},\quad
+\Vdiagn = 1000\,Z_{\mathrm{diagn}},
+\]
+\[
+Z_\bullet \sim \LN(\mu_\bullet, \mathrm{sd}_\bullet)\ \text{independently},
+\]
+truncated jointly to the set
+\begin{equation}\label{eq:truncset}
+\mathcal{A} = \{V_0 < \Vdiagn < V_{\max}\} \cap \{V_0 < \Vreg < \Vdist < V_{\max}\}.
+\end{equation}
+($Z$ is in ml; the factor 1000 converts to mm$^3$.) IJM constrains location and
+scale to be equal, $\mu_\bullet = \mathrm{sd}_\bullet$ (Table~2; also
+\cite{mdm2021}), so each log-normal has one free parameter. The subscripted
+$\mu_\bullet$ are log-normal locations and are unrelated to the TSCE
+conversion rate $\mu$; IJM uses the same letter for both. On $\mathcal{A}$,
+$\Vdiagn$ is independent of $(\Vreg,\Vdist)$. Then
+\[
+\Treg = \Tmal + \tau(\Vreg),\qquad \Tdist = \Tmal + \tau(\Vdist),\qquad
+\Tdiagn = \Tmal + \tau(\Vdiagn),
+\]
+\[
+\mathrm{stage} = \begin{cases}\text{localized} & \Vdiagn < \Vreg,\\
+\text{regional} & \Vreg \le \Vdiagn < \Vdist,\\
+\text{distant} & \Vdiagn \ge \Vdist,\end{cases}
+\qquad d_{\mathrm{diagn}} = \left(6\Vdiagn/\pi\right)^{1/3}\ \text{mm}.
+\]
+Since $\tau$ is increasing, the stage comparison on times and on volumes is the same.
+The calibrated parameters are $(m,\mu_{\mathrm{reg}},\mu_{\mathrm{dist}},\mu_{\mathrm{diagn}})$,
+with posterior medians $3.4\times10^{-4}$, 2.16, 5.62, 2.65 (IJM Table~2).
+
+\subsection{Archival sampler and quirks}
+\code{t\_prog} uses whole-vector rejection: it redraws all three volumes until
+the draw falls in $\mathcal{A}$, which is an exact sampler of the truncated
+distribution. One quirk:
+\begin{enumerate}[nosep]
+\item \textbf{Swapped parameter vectors.} The code draws $\Vreg$ with
+  \code{cdist} and $\Vdist$ with \code{creg}. IJM defines
+  $\Vreg\sim\LN(\mu_{\mathrm{reg}},\mathrm{sd}_{\mathrm{reg}})$ and
+  $\Vdist\sim\LN(\mu_{\mathrm{dist}},\mathrm{sd}_{\mathrm{dist}})$. If the
+  calibration in IJM and \cite{mdm2021} ran this code, the posterior labelled
+  $\mu_{\mathrm{reg}}$ (median 2.16) was the location of $\Vdist$, and
+  $\mu_{\mathrm{dist}}$ (5.62) the location of $\Vreg$, with the order
+  constraint $\Vreg<\Vdist$ then truncating heavily. We have not been able to
+  check which code the calibration used.
+\end{enumerate}
+The current \code{Population} class draws $\Vdist$ by a quantile shift
+($u' = u_{\mathrm{reg}} + u(1-u_{\mathrm{reg}})$ applied to the $\Vdist$
+quantile function). That shift gives the conditional law of $\Vdist$ given
+$\Vdist > \Vreg$ only when $\Vreg$ and $\Vdist$ have the same distribution. It
+also replaces truncation by setting out-of-bounds values to \code{NA}. Neither
+matches \eqref{eq:truncset}.
+
+\section{Death from other causes}\label{sec:oc}
+
+\subsection{Tabulated input}
+IJM estimates cumulative incidence functions (CIFs) for each cause from NHIS and
+SEER data and denotes the estimates $\hat S$; we write $F_k$ (other causes) and
+$G_k$ (lung cancer). For each stratum
+$k_{\mathrm{other}} = (\ag(\Tentry), \sex, \zeta, \dg(q))$ (the intensity group is
+used only for current smokers) the archival lists \code{never.other},
+\code{former.other}, \code{current.other} give a right-continuous step function
+$F_{k}(\tau)$, $\tau\in[0,\tau^{\max}_{k}]$, in years since entry, on knots
+$0=\tau_{k,0}<\tau_{k,1}<\dots<\tau_{k,J_k}=\tau^{\max}_k$. The knots are
+irregular: most spacings are 0.25 years, and spacings up to 5.5 years occur where
+no deaths were observed. Horizons $\tau^{\max}_k$ are 16 years for never and
+former smokers and 3.75--10 years for current smokers. All other-cause tables
+have $F_k(0)=0$. The terminal values $F_k(\tau^{\max}_k)$ range from 0.006
+(young never smokers) to 0.71 (old former smokers), and equal 1 in one stratum
+(current smokers, ``>85'', female, ``21+'', horizon 3.75 years).
+
+\subsection{Model (latent-time, as implemented)}
+IJM samples age and cause of death ``by the inverse transform approach \ldots
+based on CIF estimates''. The archival code does this by treating $\Tdo$ as an
+independent latent time with marginal distribution
+\begin{equation}\label{eq:TOC}
+\Pr(\Tdo - \Tentry \le \tau) = F_{k_{\mathrm{other}}}(\tau), \quad \tau \le \tau^{\max}_k,
+\end{equation}
+followed by a tail rule for the residual mass $1-F_k(\tau^{\max}_k)$. Two
+modeling facts:
+\begin{itemize}[nosep]
+\item The clock is time since entry, and the table is fixed by the age group
+  at entry. A person entering at 41 uses the ``40--44'' table for the whole
+  follow-up, also after age 45.
+\item The tables are cumulative incidences in the presence of the competing
+  cause. Using each as the marginal of an independent latent time is the
+  archival modeling choice; a cumulative incidence and a net (latent)
+  distribution differ. \code{fastMILC} keeps the archival interpretation.
+\end{itemize}
+
+\subsection{Archival sampler and quirks}
+\code{tdeath\_other} draws $u_1,u_2\sim\Unif(0,1)$.
+\begin{itemize}[nosep]
+\item If $u_1 > F_k(\tau^{\max}_k)$ (tail): it sets $\ell = \Tentry + \tau^{\max}_k$,
+  $r=110$, and returns $\Tdo = \Tentry + u_2(r-\ell)$. The intended rule was
+  presumably $\ell + u_2(r-\ell)$, i.e.\ $\Unif(\Tentry+\tau^{\max}_k,\,110)$. As
+  coded, $\Tdo\sim\Unif(\Tentry,\ 110-\tau^{\max}_k)$, which overlaps the
+  tabulated window and has upper bound $110-\tau^{\max}_k$ (94 for 16-year
+  tables).
+\item Otherwise it picks the tabulated value of $F_k$ nearest to $u_1$ (by
+  absolute difference, over \code{unique(est)}), takes the corresponding pair
+  of adjacent knots from \code{unique(time)}, and returns $\Tentry$ plus a uniform
+  draw between them. This approximates the inverse CDF with a
+  piecewise-uniform density between knots. The nearest-value rule differs from
+  the inverse-CDF rule $\min\{j: F_k(\tau_{k,j}) \ge u_1\}$.
+\item Simulation of the lookup (40{,}000 draws per table) shows that the induced
+  CDF lags the table by about one cell: for never smokers, ``80--84'', male, the
+  archival CDF at 2.0 years is 0.076 against $F_k(2.0)=0.086$; the gap shrinks to
+  under 0.002 after 8 years. For lung tables the atom is not reproduced (archival
+  CDF at 0 is 0 against $G_k(0)=0.057$ for distant, ``60--64'', male).
+\end{itemize}
+
+\section{Death from lung cancer}\label{sec:lc}
+
+\subsection{Tabulated input}
+For each stratum $k_{\mathrm{lung}}=(\mathrm{stage}, \ag(\Tdiagn), \sex)$ the
+list \code{ci.lung} gives a step function $G_k(\tau)$ in \emph{months} since
+diagnosis, on irregular knots up to $\tau^{\max}_k \approx 222$--$251$ months.
+Two features differ from the other-cause tables:
+\begin{itemize}[nosep]
+\item $G_k(0)>0$ for many strata (up to 0.137 for distant stage): an atom at
+  diagnosis.
+\item $G_k(\tau^{\max}_k)$ is large (up to 0.86), and in a few strata equals 1
+  (e.g.\ the fallback stratum ``distant NA male''). One stratum has $G\equiv 0$.
+\end{itemize}
+Strata with age group ``NA'' exist because the archival \code{grep} lookup
+falls through to them when $\ag(\cdot)$ returns \code{NA}.
+
+\subsection{Model}
+In the archival code, lung-cancer death can occur only after clinical diagnosis,
+at any stage. $\Tdl$ is an independent latent time with
+\begin{equation}\label{eq:TLC}
+\Pr\!\big(12\,(\Tdl-\Tdiagn) \le \tau\big) = G_{k_{\mathrm{lung}}}(\tau),
+\end{equation}
+where the clock is time since diagnosis and the stratum is fixed by stage and
+age group at diagnosis. $\Tdl$ is drawn for every individual, including those
+with $\Tdiagn > \Tdo$; the minimum in Section~\ref{sec:assembly} removes those
+draws. IJM (Section~2.1) states a different rule: a death is attributed to lung
+cancer ``if and only if it occurs after transition to the distant state''. The
+archival code does not impose this, and \code{fastMILC} follows the code
+(Section~\ref{sec:discrepancies}).
+
+\subsection{Archival sampler and quirks}
+\code{tdeath\_lung} uses the same nearest-value lookup and within-interval
+uniform draw as \code{tdeath\_other}, with times divided by 12. If
+$u_1 > G_k(\tau^{\max}_k)$, it returns $\Tdl = \Tdiagn + \tau^{\max}_k/12$ with a
+flag \code{event = 0}. The flag is not used in \code{nat\_hist}, so the
+residual mass becomes a point mass of lung-cancer death at the horizon. The atom
+$G_k(0)$ is handled through the nearest-value lookup between the knots at 0.
+
+\section{Assembly}\label{sec:assembly}
+\code{nat\_hist} combines the components:
+\[
+\Tdeath = \min(\Tdo, \Tdl),\qquad
+\mathrm{cause} = \begin{cases}\text{other} & \Tdo < \Tdl\\ \text{lung} & \text{otherwise}\end{cases},
+\]
+\[
+\Tpred = \Tentry + \Delta_{\mathrm{pred}},\quad
+\mathrm{death} = \mathbf 1\{\Tdeath < \Tpred\},\quad
+\Tfinal = \min(\Tdeath, \Tpred),
+\]
+\[
+\mathrm{lung\_inc} = \mathbf 1\{\Tdiagn < \Tfinal\},\quad
+\mathrm{excl} = \mathbf 1\{\Tdeath < \Tentry\}.
+\]
+$\mathrm{excl}=1$ flags individuals who died before entry. This can happen only
+through $\Tdl$, when $\Tdiagn < \Tentry$ (Section~\ref{sec:onset}); the analyst
+excludes them.
+
+\section{Discrepancies between IJM and the archival code}\label{sec:discrepancies}
+
+\code{fastMILC} follows the archival code in every case below: the archival
+number for items 1--4, and the archival structure for items 5--6.
+
+\begin{enumerate}[nosep]
+\item TSCE values (Table~\ref{tab:tsce}): $\nu_\ns$, $\alpha_\ns$ (female),
+  the male smoker base $\alpha$ (7.5 vs 7.7), and $\rho$ differ. IJM gives
+  $\rho = 0.98$ for females; the archival code and NZ give 1.02.
+\item $X$: IJM writes ``10e+7'', which read literally is $10^8$; the code uses
+  $10^7$. IJM probably means $1\mathrm{e}{+}7$.
+\item $d_0$: IJM text says 0.01\,$\mu$m, IJM Table~1 and the code say 0.01\,mm.
+\item IJM Table~1 prints the Gompertz law with $\exp(mt)$; IJM Eq.~4 and the code
+  use $\exp(-mt)$.
+\item Swapped \code{creg}/\code{cdist} in \code{t\_prog} (Section~\ref{sec:progression}).
+\item Lung-cancer death: IJM requires transition to the distant state; the code
+  requires diagnosis, at any stage, with stage-specific CIFs.
+\end{enumerate}
+
+\begin{thebibliography}{9}
+\bibitem{ijm2017} S.~A. Chrysanthopoulou. MILC: A microsimulation model of the
+natural history of lung cancer. \emph{International Journal of Microsimulation},
+10(3):5--26, 2017.
+\bibitem{milc2014} S.~A. Chrysanthopoulou. \emph{MILC: MIcrosimulation Lung Cancer
+model}. R package version 1.0, 2014.
+\bibitem{mdm2021} S.~A. Chrysanthopoulou, C.~M. Rutter, and C.~A. Gatsonis.
+Bayesian versus empirical calibration of microsimulation models: a comparative
+analysis. \emph{Medical Decision Making}, 41(6):714--726, 2021.
+\bibitem{nz2024} E.~H. Nanayakkara, N.~Sibanda, and B.~Surya. A calibrated model
+for lung cancer natural history: the case for New Zealand. \emph{Journal of
+Simulation}, 2024. doi:10.1080/17477778.2024.2426629.
+\end{thebibliography}
+
+\end{document}

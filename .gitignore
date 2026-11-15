@@ -61,3 +61,12 @@ inst/doc
 
 renv/
 renv.lock
+
+# LaTeX build artefacts
+model_description/*.aux
+model_description/*.log
+model_description/*.fls
+model_description/*.fdb_latexmk
+model_description/*.out
+model_description/*.synctex.gz
+model_description/*.pdf
