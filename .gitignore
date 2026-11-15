@@ -70,3 +70,7 @@ model_description/*.fdb_latexmk
 model_description/*.out
 model_description/*.synctex.gz
 model_description/*.pdf
+
+# Local agent notes
+CLAUDE.md
+STATUS.md
