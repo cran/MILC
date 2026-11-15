@@ -104,7 +104,7 @@ test_that("vdraw_sc_step first arrivals match the tables (Monte Carlo)", {
     x <- nhppp::vdraw_sc_step(
       lambda_matrix = rates$lambda_matrix[rep(row, n), , drop = FALSE],
       time_breaks = rates$time_breaks,
-      atmost1 = TRUE
+      report_first_K = 1L
     )[, 1]
     lam <- rates$lambda_matrix[row, ]
     Lambda <- c(0, cumsum(lam * diff(rates$time_breaks)))

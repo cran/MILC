@@ -84,7 +84,7 @@ truncates all simulated ages at $M$.
 
 \paragraph{Onset (Section~\ref{sec:onset}).} $\Tmal$ is drawn from birth, not
 conditioned on $\Tmal>\Tentry$, with \code{vdraw\_cumulative\_intensity}
-(\code{atmost1 = TRUE}) on $[0,M]$ and the closed-form $\Lambda_{\mathrm{mal}}$
+(\code{report\_first\_K = 1}) on $[0,M]$ and the closed-form $\Lambda_{\mathrm{mal}}$
 of \eqref{eq:lambdaM}. $\Lambda_{\mathrm{mal}}$ has no closed-form inverse, so the
 inverse is computed by Newton's method, vectorized over all individuals. For
 each individual we select the smoking segment $j$ by comparing the target $z$
@@ -116,7 +116,7 @@ converted to a piecewise-constant intensity on its own irregular knots,
 \begin{equation}\label{eq:steplambda}
 \lambda_j = \frac{\log \bar F(\tau_j) - \log \bar F(\tau_{j+1})}{\tau_{j+1}-\tau_j},\qquad j=0,\dots,J-1,
 \end{equation}
-and sampled with \code{vdraw\_sc\_step} (\code{atmost1 = TRUE}), once per stratum
+and sampled with \code{vdraw\_sc\_step} (\code{report\_first\_K = 1}), once per stratum
 with that stratum's knot vector. The first arrival $\tilde\tau$ satisfies
 $\Pr(\tilde\tau\le\tau_j) = 1-\bar F(\tau_j)/\bar F(\tau_0)$ at every knot,
 exactly. Each cause has its own independent latent time, as in the archival

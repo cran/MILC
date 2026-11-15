@@ -118,7 +118,7 @@ draw_step_first_arrival <- function(rates, row, n, chunk_size) {
     out[idx] <- nhppp::vdraw_sc_step(
       lambda_matrix = matrix(lam, nrow = length(idx), ncol = K, byrow = TRUE),
       time_breaks = tb,
-      atmost1 = TRUE
+      report_first_K = 1L
     )[, 1L]
   }
   out
