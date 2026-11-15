@@ -8,6 +8,7 @@
 
     milc.max_age = 100, # years
     milc.death_other_tail = "archival", # or "corrected"; see generate_death_other()
+    milc.progression_method = "rejection", # or "conditional" (CRN); see generate_progression()
 
     milc.globalRNG.seed = NULL,
     milc.antithetic = FALSE,

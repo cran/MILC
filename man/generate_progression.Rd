@@ -4,7 +4,12 @@
 \alias{generate_progression}
 \title{Generate disease progression after onset}
 \usage{
-generate_progression(age_onset, params, max_rounds = 1000L)
+generate_progression(
+  age_onset,
+  params,
+  method = getOption("milc.progression_method"),
+  max_rounds = 1000L
+)
 }
 \arguments{
 \item{age_onset}{age at onset of the first malignant cell; \code{NA} for no onset.}
@@ -16,7 +21,10 @@ generate_progression(age_onset, params, max_rounds = 1000L)
 (log-normal parameters of the volume in ml; archival \code{cdiagn}, \code{creg},
 \code{cdist}).}
 
-\item{max_rounds}{maximum rounds of redrawing for the order constraint.}
+\item{method}{\code{"rejection"} or \code{"conditional"}; default
+\code{getOption("milc.progression_method")}.}
+
+\item{max_rounds}{maximum rounds of redrawing (rejection only).}
 }
 \value{
 data.table with one row per person: \code{age_at_regional_disease},
@@ -29,11 +37,12 @@ death.
 Samples the volume thresholds \eqn{(V_{reg}, V_{dist}, V_{diagn})} from the
 joint law of independent log-normals truncated to
 \eqn{\{V_0 < V_{diagn} < V_{max}\} \cap \{V_0 < V_{reg} < V_{dist} <
-V_{max}\}} (\code{model.tex}, Eq. truncset): \eqn{V_{diagn}} by inverse CDF of
-its truncated law; \eqn{V_{reg}} and \eqn{V_{dist}} by inverse CDF of their
-box-truncated laws, redrawing only the rows with \eqn{V_{reg} \ge
-V_{dist}}. This is exact, as is the archival whole-vector rejection in
-\code{t_prog}.
+V_{max}\}} (\code{model.tex}, Eq. truncset), exactly, by one of two methods:
+\code{"rejection"} (\code{\link[=progression_volumes_rejection]{progression_volumes_rejection()}}; default, faster) or
+\code{"conditional"} (\code{\link[=progression_volumes_conditional]{progression_volumes_conditional()}}; three uniforms per
+person and a deterministic map from them to the volumes, for calibration
+with common random numbers). The archival \code{t_prog} uses whole-vector
+rejection.
 }
 \details{
 As in the archival \code{t_prog}, \eqn{V_{reg}} is drawn with the parameters

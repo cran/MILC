@@ -134,7 +134,27 @@ are drawn exactly from the truncated law on $\mathcal A$ \eqref{eq:truncset}:
 $\Vdiagn$ by inverse CDF of its log-normal truncated to $(V_0,V_{\max})$;
 $\Vreg$ and $\Vdist$ by inverse CDF of their laws truncated to $(V_0,V_{\max})$,
 redrawing only the rows with $\Vreg\ge\Vdist$ (acceptance about 0.46 at the
-default values). As in the archival code, $\mu_\bullet=\mathrm{sd}_\bullet$, and
+default values). This is the default. An option
+(\code{milc.progression\_method = "conditional"}) draws the same law by a
+sequence of conditional inverse-CDF draws, three uniforms per person and no
+rejection. Write $x=\log(\Vdist/1000)$, $y=\log(\Vreg/1000)$, with normal
+densities $\phi_{\mathrm{dist}},\phi_{\mathrm{reg}}$ and CDFs
+$\Phi_{\mathrm{dist}},\Phi_{\mathrm{reg}}$, and $a<b$ the bounds of $\log(V/1000)$
+implied by $(V_0,V_{\max})$. On $\mathcal A$,
+\[
+f(x) \propto \phi_{\mathrm{dist}}(x)\{\Phi_{\mathrm{reg}}(x)-\Phi_{\mathrm{reg}}(a)\},
+\quad a<x<b;\qquad
+y\mid x \sim \text{normal truncated to } (a,x).
+\]
+So $\Vdiagn$ is drawn from its truncated log-normal; $\Vdist$ from the marginal
+$f$, whose CDF (a bivariate normal probability) is tabulated by 10-point
+Gauss--Legendre quadrature on 4000 cells and inverted by safeguarded Newton
+steps, to about $10^{-13}$; and $\Vreg$ given $\Vdist$ from its log-normal
+truncated to $(V_0,\Vdist)$. The map from the uniforms to the volumes is
+deterministic and monotone in each uniform, so common random numbers stay
+aligned across progression parameter values in calibration. It is 5--6 times
+slower than rejection (0.11 vs 0.022 seconds for 26{,}730 people). As in the
+archival code, $\mu_\bullet=\mathrm{sd}_\bullet$, and
 $\Vreg$ is drawn with the parameter vector named \code{cdist} and $\Vdist$ with
 the one named \code{creg}. The archival code has no default values; the
 \code{nat\_hist} examples use $m=4.2\times10^{-4}$, \code{cdiagn} $=3.91$,
