@@ -33,8 +33,9 @@ milc_intensity_group <- function(q) {
 
 #' Map smoking status to the archival labels
 #'
-#' Accepts the archival labels `"never"`, `"former"`, `"current"`, and the
-#' recipe labels `"non_smoker"` (mapped to `"never"`) and `"smoker"` (mapped to
+#' Accepts the archival labels `"never"`, `"former"`, `"current"`, the labels
+#' of [synthetic_nlst_recipe] (`"former_smoker"`, `"current_smoker"`), and the
+#' labels `"non_smoker"` (mapped to `"never"`) and `"smoker"` (mapped to
 #' `"current"`).
 #'
 #' @param status character vector.
@@ -43,6 +44,7 @@ milc_intensity_group <- function(q) {
 milc_smoking_status <- function(status) {
   map <- c(
     never = "never", former = "former", current = "current",
+    former_smoker = "former", current_smoker = "current",
     non_smoker = "never", smoker = "current"
   )
   out <- unname(map[status])

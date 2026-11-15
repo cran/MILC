@@ -82,6 +82,23 @@ other-cause tail and searches for $\Tmal$ on $[0,150]$; \code{fastMILC} uses $M$
 in both places. This changes the distribution of $\Tdo$ in the tail (below) and
 truncates all simulated ages at $M$.
 
+\paragraph{Population recipe.} The canonical recipe is \code{synthetic\_nlst\_recipe}:
+synthetic NLST-like data with one row per person (26{,}730 current and former
+smokers aged 49--79 at study entry on 2002-06-30). Each person has a birth
+moment (\code{inception\_moment}; onset is simulated from birth), a study
+entry moment ($\Tentry$ is the age at entry), $\zeta$, $q$, and moments of
+starting and quitting smoking, which give $t_s$ and $t_q$. The onset hazard
+switches at $t_s$ and $t_q$ (Section~\ref{sec:onset}), so these moments are
+needed; the mortality tables do not use them. The source data have no smoking
+history, so the moments are currently synthetic: $t_s$ is drawn from a
+Normal(17, 4) truncated to $[10,\ t_q - 1]$ (former) or $[10,\ \Tentry - 1]$
+(current), and $\Tentry - t_q \sim \Unif(0, 15)$ for former smokers, which
+respects the NLST criterion of quitting within 15 years before entry. The
+criterion of at least 30 pack-years is not imposed. These draws are
+placeholders: the moments of starting and quitting should be obtained from the
+CISNET Smoking History Generator, conditional on sex, birth cohort, and
+smoking status and intensity at entry.
+
 \paragraph{Onset (Section~\ref{sec:onset}).} $\Tmal$ is drawn from birth, not
 conditioned on $\Tmal>\Tentry$, with \code{vdraw\_cumulative\_intensity}
 (\code{report\_first\_K = 1}) on $[0,M]$ and the closed-form $\Lambda_{\mathrm{mal}}$

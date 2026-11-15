@@ -66,3 +66,43 @@
 #' }
 #' @source Archival MILC 1.0 (Chrysanthopoulou, 2014), data `ci.lung`.
 "rates_death_lung"
+
+#' Synthetic NLST-like population recipe
+#'
+#' Synthetic NLST-like data: the canonical population recipe for a fastMILC
+#' simulation, in the format [validate_recipe()] checks. One row per person:
+#' 26,730 current and former smokers aged 49--79 who enter the study on
+#' 2002-06-30 (the NLST enrollment period). `Population$new()` expands the
+#' recipe to a population of the requested size in proportion to `weight`.
+#' Built from `data-raw/nlst_recipe.rda` (one row per stratum with a count) by
+#' `data-raw/20_synthetic_nlst_recipe.R`.
+#'
+#' The source has no smoking history. The onset hazard changes at the ages of
+#' starting and quitting smoking, so the build script draws them at random
+#' (fixed seed): age at starting from a Normal(17, 4) truncated to
+#' \[10, age at quitting or at entry minus 1\]; years from quitting to entry
+#' from Unif(0, 15) for former smokers (NLST inclusion criterion: quit within
+#' 15 years). The NLST criterion of at least 30 pack-years is not imposed.
+#'
+#' @format A [data.table][data.table::data.table] with 26,730 rows and 11
+#'   columns:
+#' \describe{
+#'   \item{sex}{`"male"` or `"female"`.}
+#'   \item{birth_cohort}{integer, calendar year of birth (1923--1953).}
+#'   \item{inception_moment}{`Date`, birth (June 30 of `birth_cohort`); the
+#'     earliest moment in the simulation.}
+#'   \item{study_entry_moment}{`Date`, study entry (2002-06-30).}
+#'   \item{spawn_age}{integer, age at study entry (49--79 years).}
+#'   \item{smoking_status_at_spawn_age}{`"current"` or `"former"`; NLST
+#'     participants who are not current smokers are former smokers.}
+#'   \item{smoking_intensity_at_spawn_age}{integer, cigarettes per day while
+#'     smoking (10--201).}
+#'   \item{smoking_start_moment}{`Date` of starting smoking (synthetic).}
+#'   \item{smoking_quit_moment}{`Date` of quitting (synthetic); `NA` for
+#'     current smokers.}
+#'   \item{count}{integer, 1.}
+#'   \item{weight}{`1 / 26730`.}
+#' }
+#' @source Synthetic data resembling the National Lung Screening Trial (NLST)
+#'   population; `data-raw/nlst_recipe.rda`.
+"synthetic_nlst_recipe"

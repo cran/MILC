@@ -1,27 +1,22 @@
 #' Validate population, (vectorized)
 #'
-#' @description Validate a population data.table, and create necessary placeholder variabels.
-#' Meant for internal use.
-#' Check that the population data.table includes required variables,
-#' and optionally perform checks
-#'
-#' Required variables:
-#'  demographic_vars <- c("person_id", "sex", "inception_moment", "spawn_age")
-#'  risk_factor_vars <- c("smoking_status_at_spawn_age", "smoking_intensity_at_spawn_age")
+#' @description Validate a population data.table. Meant for internal use.
+#' Check that the population has the required variables (those of
+#' [validate_recipe()] plus `person_id`, without `weight`) and, optionally,
+#' that their values are consistent.
 #'
 #' Order, key, and indices
 #'  This function orders the population by `person_id` and sets `person_id` to be the key.
 #'  It also adds the index `birth_cohort__sex`
 #'
 #' @param population A data.table, data.frame, list, or matrix
-#'               with the population data.  Coersed into a data.table
+#'               with the population data.  Coerced into a data.table
 #' @param drop_extra_variables Logical. If TRUE, remove any variables that are
-#' not in the required or optional lists above
+#' not in the required list
 #' @param check Logical. If TRUE, perform checks.
 #' @return A data.table with the validated `population`, ordered by the key `person_id`.
 #'
 #' @import data.table
-
 validate_population <- function(
   population,
   drop_extra_variables = TRUE,
@@ -35,16 +30,19 @@ validate_population <- function(
   demographic_vars <- c(
     "person_id",
     "sex",
+    "birth_cohort",
     "inception_moment",
+    "study_entry_moment",
     "spawn_age"
   )
   risk_factor_vars <- c(
     "smoking_status_at_spawn_age",
-    "smoking_intensity_at_spawn_age"
+    "smoking_intensity_at_spawn_age",
+    "smoking_start_moment",
+    "smoking_quit_moment"
   )
 
   required_vars <- c(demographic_vars, risk_factor_vars)
-  all_vars <- c(required_vars)
 
   missing_vars <- which(!required_vars %in% pop_vars)
   if (length(missing_vars) > 0) {
@@ -56,19 +54,8 @@ validate_population <- function(
   }
 
   if (drop_extra_variables) {
-    drop_vars <- setdiff(pop_vars, all_vars)
-    population[, c(drop_vars) := NULL]
-  }
-
-  if (!"birth_cohort" %in% names(population)) {
-    population[, birth_cohort := calendar_year_from_date(inception_moment)]
-  } else {
-    tmp_birth_cohort <- R.utils::tempvar(prefix = "birth_cohort_")
-    population[,
-      (tmp_birth_cohort) := calendar_year_from_date(inception_moment)
-    ]
-    stopifnot(population$birth_cohort == population[[tmp_birth_cohort]])
-    population[, (tmp_birth_cohort) := NULL]
+    drop_vars <- setdiff(pop_vars, required_vars)
+    if (length(drop_vars)) population[, c(drop_vars) := NULL]
   }
 
   setkey(population, person_id)
@@ -79,14 +66,10 @@ validate_population <- function(
     return(population)
   }
 
-  if (population[, any(is.na(person_id))]) {
-    stop("Missing values in `person_id`")
+  if (population[, anyNA(person_id) || anyDuplicated(person_id) > 0]) {
+    stop("`person_id` must be non-missing and unique")
   }
-  stopifnot(population[, all(tolower(sex) %in% c("male", "female"))])
-  stopifnot(population[, all(!is.na(inception_moment))])
-  stopifnot(population[, all(
-    spawn_age >= 0 & spawn_age <= getOption("milc.max_age")
-  )])
+  check_recipe_values(population)
 
   return(population)
 }

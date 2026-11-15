@@ -30,7 +30,7 @@ DES with \code{nhppp} paradigm.
 \subsection{Usage}{
 \if{html}{\out{<div class="r">}}\preformatted{Population$new(
   target_population_size,
-  recipe,
+  recipe = fastMILC::synthetic_nlst_recipe,
   parameters = fastMILC::deterministic_params,
   rng_stream = RNGStreams$new(),
   simulate_at_initialization = TRUE

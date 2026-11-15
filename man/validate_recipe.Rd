@@ -13,7 +13,7 @@ validate_recipe(
 }
 \arguments{
 \item{recipe}{A data.table, data.frame, list, or matrix
-with the population recipe. Coersed into a data.table}
+with the population recipe. Coerced into a data.table}
 
 \item{drop_extra_variables}{Logical. If TRUE, remove any variables that are
 not in the required or optional lists above}
@@ -26,14 +26,30 @@ not in the required or optional lists above}
 A data.table with the validated \code{recipe}
 }
 \description{
-Validate a population recipe for use in fastMILC
-Check that the recipe file includes required variables,
-and optionally perform checks
+Validate a population recipe for use in fastMILC. Check that
+the recipe has the required variables and, optionally, that their values are
+consistent. \link{synthetic_nlst_recipe} is the canonical recipe.
 
 Required variables:
-demographic_vars  <- c("sex", "birth_cohort")
-instruction_vars  <- c("weight", "spawn_age")
-
-Optional variables
-risk_factor_vars  <- c("smoking_status_at_NLST_entry", "smoking_intensity_at_NLST_entry")
+\describe{
+\item{\code{sex}}{\code{"male"} or \code{"female"}.}
+\item{\code{birth_cohort}}{integer calendar year of birth.}
+\item{\code{inception_moment}}{\code{Date}, birth: the earliest moment in the
+simulation (onset is simulated from birth). Its calendar year is
+\code{birth_cohort}.}
+\item{\code{study_entry_moment}}{\code{Date}, entry into the study.}
+\item{\code{spawn_age}}{age at study entry (years); within one year of
+\code{study_entry_moment - inception_moment}.}
+\item{\code{smoking_status_at_spawn_age}}{\code{"never"}, \code{"former"}, or
+\code{"current"}.}
+\item{\code{smoking_intensity_at_spawn_age}}{cigarettes per day while smoking;
+0 for never smokers, at least 1 otherwise.}
+\item{\code{smoking_start_moment}}{\code{Date} of starting smoking; \code{NA} for never
+smokers; between \code{inception_moment} and \code{study_entry_moment} otherwise.}
+\item{\code{smoking_quit_moment}}{\code{Date} of quitting; non-missing for former
+smokers only, after \code{smoking_start_moment} and not after
+\code{study_entry_moment}.}
+\item{\code{weight}}{non-negative sampling weight.}
+}
+Optional variables: \code{count}.
 }

@@ -8,10 +8,10 @@ validate_population(population, drop_extra_variables = TRUE, check = TRUE)
 }
 \arguments{
 \item{population}{A data.table, data.frame, list, or matrix
-with the population data.  Coersed into a data.table}
+with the population data.  Coerced into a data.table}
 
 \item{drop_extra_variables}{Logical. If TRUE, remove any variables that are
-not in the required or optional lists above}
+not in the required list}
 
 \item{check}{Logical. If TRUE, perform checks.}
 }
@@ -19,14 +19,10 @@ not in the required or optional lists above}
 A data.table with the validated \code{population}, ordered by the key \code{person_id}.
 }
 \description{
-Validate a population data.table, and create necessary placeholder variabels.
-Meant for internal use.
-Check that the population data.table includes required variables,
-and optionally perform checks
-
-Required variables:
-demographic_vars <- c("person_id", "sex", "inception_moment", "spawn_age")
-risk_factor_vars <- c("smoking_status_at_spawn_age", "smoking_intensity_at_spawn_age")
+Validate a population data.table. Meant for internal use.
+Check that the population has the required variables (those of
+\code{\link[=validate_recipe]{validate_recipe()}} plus \code{person_id}, without \code{weight}) and, optionally,
+that their values are consistent.
 
 Order, key, and indices
 This function orders the population by \code{person_id} and sets \code{person_id} to be the key.

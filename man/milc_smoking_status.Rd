@@ -13,8 +13,9 @@ milc_smoking_status(status)
 character vector in \code{c("never", "former", "current")}.
 }
 \description{
-Accepts the archival labels \code{"never"}, \code{"former"}, \code{"current"}, and the
-recipe labels \code{"non_smoker"} (mapped to \code{"never"}) and \code{"smoker"} (mapped to
+Accepts the archival labels \code{"never"}, \code{"former"}, \code{"current"}, the labels
+of \link{synthetic_nlst_recipe} (\code{"former_smoker"}, \code{"current_smoker"}), and the
+labels \code{"non_smoker"} (mapped to \code{"never"}) and \code{"smoker"} (mapped to
 \code{"current"}).
 }
 \keyword{internal}
