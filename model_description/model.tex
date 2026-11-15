@@ -111,12 +111,21 @@ target $z' = z - \Lambda_{\mathrm{mal}}(b_j) + \tilde H_{\psi_j}(b_j)$ with
 \tilde H_\psi(t) = H_\psi(t)-H_\psi(0)
  = K\Big[-t + B^{-1}\operatorname{log1p}\big\{B(e^{ct}-1)/c\big\}\Big],
 \]
-which avoids the cancellation in \eqref{eq:Htsce}, and iterate
+which avoids the cancellation in \eqref{eq:Htsce}. The code evaluates it as
+\[
+\tilde H_\psi(t) = K\Big[\frac{e^{ct}-1-ct}{c} + \frac{\log(1+x)-x}{B}\Big],
+\qquad x = \frac{B(e^{ct}-1)}{c},
+\]
+with series for both numerators at small arguments, which also removes the
+cancellation between $-t$ and $B^{-1}\log(1+x)$ at small $t$; $B$ is computed as
+$2\alpha\mu/(\gamma+\sqrt{\gamma^2+4\alpha\mu})$. We then iterate
 $t \leftarrow t - \{\tilde H_{\psi_j}(t)-z'\}/h_{\psi_j}(t)$ from the segment's
 right end. $\tilde H_\psi$ is increasing and convex, so these iterates decrease
 monotonically to the root; rows not converged after an iteration cap (roots near
 $t=0$, where $h\approx 0$) fall back to vectorized bisection. This is the same
-inverse-CDF map as the archival \code{t\_mal}. No event in $[0,M]$ gives
+inverse-CDF map as the archival \code{t\_mal}: with matched uniforms and the
+archival search interval $[0,150]$, the two agree to \code{uniroot}'s tolerance
+($3\times10^{-5}$ years), and both have no root for the same uniforms. No event in $[0,M]$ gives
 \code{NA}, where the archival code continues the search to 150 and returns 150
 if there is no root.
 

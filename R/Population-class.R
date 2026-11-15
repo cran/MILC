@@ -196,33 +196,22 @@ Population <- R6::R6Class(
       }
       private$.rng_stream$activateStream("parameters")
 
+      # One parameter row per sex (data-raw/10_baseline_model_parameters.R).
       private$.population <- private$.parameters[
         private$.population,
-        on = c("sex", "smoking_status_at_spawn_age")
+        on = "sex"
       ]
+      setkey(private$.population, person_id)
 
-      private$.population[,
-        multiplier := (1 + alpha1 * smoking_intensity_at_spawn_age^alpha2)
-      ]
-      private$.population[, cell_division_rate := alpha0 * multiplier]
-      private$.population[, gamma := gamma0 * multiplier]
-      private$.population[,
-        cell_apoptosis_rate := cell_division_rate -
-          malignant_cell_conversion_rate -
-          gamma
-      ]
-
-      if (drop_intermediate_params) {
-        drop_cols <- c(
-          "multiplier",
-          "alpha0",
-          "alpha1",
-          "alpha2",
-          "gamma",
-          "gamma0"
-        )
-        private$.population[, (drop_cols) := NULL]
-      }
+      # Ages at starting and quitting smoking (NA if never / not quit).
+      private$.population[, `:=`(
+        age_smoking_start = as.numeric(
+          smoking_start_moment - inception_moment
+        ) / 365.25,
+        age_smoking_quit = as.numeric(
+          smoking_quit_moment - inception_moment
+        ) / 365.25
+      )]
 
       invisible(self)
     },
@@ -281,12 +270,15 @@ Population <- R6::R6Class(
       private$.rng_stream$activateStream("disease_onset")
 
       #browser()
+      onset_cols <- setdiff(names(private$.parameters), "sex")
       private$.population[,
-        age_at_disease_onset := runif(
-          .N,
-          min = spawn_age,
-          max = age_dead_from_other_causes
-        )
+        age_at_disease_onset := generate_onset(
+          params = .SD,
+          age_smoking_start = age_smoking_start,
+          age_smoking_quit = age_smoking_quit,
+          intensity = smoking_intensity_at_spawn_age
+        ),
+        .SDcols = onset_cols
       ]
 
       private$.resolveAges(index_var = "age_at_disease_onset")

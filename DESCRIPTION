@@ -41,6 +41,7 @@ Collate:
     'utils-validate_population.R'
     'generate-death-other.R'
     'generate-death-cancer.R'
+    'generate-onset.R'
     'Population-class.R'
     'utils-onLoad.R'
     'data.R'

@@ -106,3 +106,35 @@
 #' @source Synthetic data resembling the National Lung Screening Trial (NLST)
 #'   population; `data-raw/nlst_recipe.rda`.
 "synthetic_nlst_recipe"
+
+#' Baseline model parameters
+#'
+#' One row per sex. The onset columns are the two-stage clonal expansion (TSCE)
+#' parameters of the archival `HT_mal` (Chrysanthopoulou, 2014), which fastMILC
+#' uses where they differ from Chrysanthopoulou (2017), Table 2
+#' (`model_description/model.tex`, Table 1 and Section 9). Built by
+#' `data-raw/10_baseline_model_parameters.R`.
+#'
+#' @format A [data.table][data.table::data.table] with 2 rows:
+#' \describe{
+#'   \item{sex}{`"male"`, `"female"`.}
+#'   \item{n_stem_cells}{\eqn{X}, number of normal stem cells (\eqn{10^7}).}
+#'   \item{normal_cell_initiation_rate}{\eqn{\nu_{ns}}.}
+#'   \item{malignant_cell_conversion_rate}{\eqn{\mu}.}
+#'   \item{cell_division_rate_nonsmoking}{\eqn{\alpha_{ns}}.}
+#'   \item{cell_division_rate_smoking_base}{\eqn{\alpha_{s,0}}; while smoking
+#'     \eqn{\alpha_s = \alpha_{s,0}\kappa(q)}.}
+#'   \item{net_proliferation_rate}{\eqn{\gamma = \alpha - \beta - \mu} for
+#'     non-smoking; while smoking \eqn{\gamma\kappa(q)}.}
+#'   \item{smoking_initiation_multiplier}{\eqn{\rho}; \eqn{\nu_s = \rho\nu_{ns}}.}
+#'   \item{smoking_dose_coefficient, smoking_dose_exponent}{\eqn{\alpha_1,
+#'     \alpha_2} in \eqn{\kappa(q) = 1 + \alpha_1 q^{\alpha_2}}, \eqn{q}
+#'     cigarettes per day.}
+#'   \item{tumor_logvolume_min, tumor_logvolume_max, tumor_growth_scale,
+#'     tumor_growth_shape, tumor_logvolume_regional_mean,
+#'     tumor_logvolume_regional_sd, tumor_logvolume_distal_mean,
+#'     tumor_logvolume_distal_sd, tumor_logvolume_diagnosis_mean,
+#'     tumor_logvolume_diagnosis_sd}{progression parameters (provisional).}
+#' }
+#' @source Archival MILC 1.0 (Chrysanthopoulou, 2014), `HT_mal`.
+"deterministic_params"
