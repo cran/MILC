@@ -1,0 +1,234 @@
+---
+title: "fastMILC validation against archival MILC 1.0"
+format:
+  html:
+    embed-resources: true
+    toc: true
+    code-fold: true
+execute:
+  echo: false
+  warning: false
+---
+
+```{r setup}
+library(data.table)
+library(ggplot2)
+library(knitr)
+r <- readRDS(file.path(
+  if (file.exists("cache/results.rds")) "." else "validation", "cache", "results.rds"
+))
+m <- r$meta
+# categorical slots 1-3 of the reference palette (fixed order)
+side_col <- c(
+  "archival, exact lookup" = "#2a78d6",
+  "archival, unmodified" = "#eb6834",
+  "fastMILC" = "#1baf7a"
+)
+theme_set(theme_minimal(base_size = 11) +
+  theme(panel.grid.minor = element_blank(), legend.position = "top"))
+fmt <- function(x, d = 4) formatC(x, format = "f", digits = d)
+count_verdicts <- function(d) {
+  d[, .N, by = verdict][order(match(verdict, c("equivalent", "inconclusive", "different", "descriptive")))]
+}
+```
+
+Run of `r format(m$date, "%Y-%m-%d %H:%M")`, fastMILC commit `r m$fastMILC_commit`,
+nhppp `r m$nhppp`, `r m$R`. End-to-end population N = `r format(m$N, big.mark = ",")`
+from `synthetic_nlst_recipe`; seed `r m$seed`. Reproduce with
+`Rscript validation/run.R `r format(m$N, scientific = FALSE)`` and
+`quarto render validation/report.qmd`.
+
+## Design
+
+**Configuration.** fastMILC runs with `milc.max_age = 110` and the archival
+other-cause tail. In this configuration every fastMILC component specifies the
+archival model; the remaining differences are numerical (Section *Known
+differences*).
+
+**Estimand.** fastMILC simulates people conditional on being alive and without
+a diagnosed lung cancer at study entry. The archival `nat_hist` draws are
+redrawn per person until `T_do >= entry` and `T_diagn >= entry`. Other-cause
+death is independent of the onset–progression–lung-death chain, so this is
+the same conditional law, and both sides keep the recipe composition.
+
+**References.**
+
+- *A. Mortality components.* The archival samplers `tdeath_other` and
+  `tdeath_lung` do not sample their own tables exactly (Section *Archival
+  mortality samplers*). fastMILC is therefore tested against the exact law of
+  each archival table: the tabulated CIF at the knots plus, for other causes,
+  the archival tail (residual mass $1 - F_{\max}$ spread as
+  $\mathrm{Unif}(0,\ 110 - a - h)$ in time since entry $a$), and for lung
+  cancer the residual point mass at the horizon $h$ with the $t = 0$ atom
+  merged into the first cell (decision R3). Statistic:
+  $\max_k |\hat F(t_k) - F(t_k)|$ over knots $t_k > 0$.
+  `r format(m$n_fast_stratum, big.mark = ",")` fastMILC draws per stratum,
+  at the stratum's mid-group age.
+- *Onset and progression components.* fastMILC versus the archival `t_mal` and
+  `t_prog` (these samplers are exact up to `uniroot` tolerance).
+- *B. End to end (test).* fastMILC `Population` versus the archival
+  `nat_hist` in which only the cell lookup of `tdeath_other` and
+  `tdeath_lung` is replaced by an exact inverse of the tabulated CIF (linear
+  between knots, i.e. the archival uniform within a cell). Everything else is
+  the archival code: `nat_hist`, `t_mal`, `t_prog`, age and intensity
+  grouping, stratum `grep`, the other-cause tail, the residual lung point mass.
+  The replacement is independent of the fastMILC code.
+- *C. End to end (descriptive).* fastMILC versus the unmodified archival
+  `nat_hist`; draws with an `NA` death time are redrawn and counted.
+
+**Criterion.** Effect sizes: sup-norm distance between distribution
+functions (cumulative incidence functions where events compete; all histories
+are complete, so there is no censoring) with tolerance 0.005, and absolute
+differences of proportions with tolerance 0.005. Each estimate has an
+approximate 95% Monte Carlo bound $b$ (Kolmogorov: $1.358\sqrt{1/n_1 + 1/n_2}$,
+one-sample $1.358/\sqrt n$; proportions: $1.96\,\mathrm{se}$). Verdicts:
+*equivalent* if $|\hat\delta| + b \le$ tol, *different* if
+$|\hat\delta| - b >$ tol, *inconclusive* otherwise. Bounds are per row, not
+adjusted for multiplicity.
+
+## Summary
+
+```{r summary}
+summ <- rbind(
+  r$mortality[role == "test", .(part = "A. mortality strata (fastMILC vs exact table law)", verdict)],
+  r$components[, .(part = "onset and progression components", verdict)],
+  r$end_to_end[oracle == "exact lookup", .(part = "B. end to end vs archival, exact lookup", verdict)]
+)
+tab <- dcast(summ[, .N, by = .(part, verdict)], part ~ verdict, value.var = "N", fill = 0)
+setcolorder(tab, intersect(c("part", "equivalent", "inconclusive", "different"), names(tab)))
+kable(tab)
+```
+
+## A. Mortality strata
+
+```{r mort-table}
+mt <- r$mortality[role == "test"]
+kable(count_verdicts(mt), caption = "fastMILC against the exact law of each archival table.")
+worst <- mt[order(-estimate)][1:10, .(check, group, n, estimate = fmt(estimate), bound = fmt(bound), verdict)]
+kable(worst, caption = "Ten largest distances (fastMILC).")
+```
+
+```{r mort-fig, fig.height = 4.2, fig.width = 8}
+md <- r$mortality[, .(
+  family = paste(check, sub(" .*", "", group)),
+  sampler = fifelse(sampler == "fastMILC", "fastMILC", "archival, unmodified"),
+  estimate
+)]
+ggplot(md, aes(estimate, family, colour = sampler)) +
+  geom_vline(xintercept = 0.005, linetype = 2, colour = "grey45") +
+  geom_point(position = position_jitter(height = 0.15, seed = 1), size = 2.2, alpha = 0.8) +
+  scale_x_log10() +
+  scale_colour_manual(values = side_col, name = NULL) +
+  labs(x = "max over knots |F_hat - F_table| (log scale; dashed: tolerance 0.005)",
+       y = NULL, title = "Distance from the exact table law, one point per stratum")
+```
+
+### Archival mortality samplers
+
+```{r arch-mort}
+am <- r$mortality[role == "descriptive"]
+fam <- am[, .(
+  strata = .N,
+  median_distance = fmt(median(estimate), 3),
+  max_distance = fmt(max(estimate), 3),
+  strata_with_NA = sum(na_rate > 0),
+  max_NA_rate = fmt(max(na_rate), 4)
+), by = .(family = paste(check, sub(" .*", "", group)))]
+kable(fam, caption = "Unmodified archival samplers against the exact law of their own tables.")
+```
+
+The archival lookup `which(unique(abs(u1 - est)) == min(...))` takes positions
+in the de-duplicated vector of distances and uses them as positions in
+`unique(time)`. The step tables store each step twice, so the selected cell
+is one to two cells after the cell whose CIF brackets `u1` (decision D8: not
+reproduced). The lag matters where the CIF rises steeply over the first cells
+(distant-stage lung death) or moves in coarse steps (current-smoker strata
+built from few people). When the nearest tabulated value is the last one, the
+upper index runs past the table and `tdeath_other` returns `NA`; `nat_hist`
+then returns an all-`NA` history. In stratum `>85 female 21+` (three knots)
+a quarter of the draws are `NA`.
+
+## Onset and progression components
+
+```{r components}
+kable(r$components[, .(check, group, n_fast, n_arch,
+                       fastMILC = fmt(value_fast), archival = fmt(value_arch),
+                       estimate = fmt(estimate), bound = fmt(bound), verdict)])
+```
+
+## B. End to end, archival with exact lookup
+
+```{r e2e-test}
+eb <- r$end_to_end[oracle == "exact lookup"]
+kable(count_verdicts(eb))
+kable(eb[group == "all", .(check, fastMILC = fmt(value_fast), archival = fmt(value_arch),
+                           estimate = fmt(estimate), bound = fmt(bound), verdict)],
+      caption = "Whole population.")
+nonequiv <- eb[verdict != "equivalent"]
+```
+
+Rows not judged equivalent (`r nrow(nonequiv)` of `r nrow(eb)`):
+
+```{r e2e-nonequiv}
+kable(nonequiv[order(verdict, -abs(estimate)), .(check, group, n_fast, n_arch,
+  fastMILC = fmt(value_fast), archival = fmt(value_arch),
+  estimate = fmt(estimate), bound = fmt(bound), verdict)])
+```
+
+```{r cif-diff, fig.height = 6, fig.width = 8}
+cv <- r$curves
+w <- dcast(cv, group + event + time ~ side, value.var = "cif")
+dd <- rbind(
+  w[, .(group, event, time, oracle = "archival, exact lookup", diff = fastMILC - `archival, exact lookup`)],
+  w[, .(group, event, time, oracle = "archival, unmodified", diff = fastMILC - `archival, unmodified`)]
+)
+dd[, event := factor(event, c("diagnosis", "lung_cancer", "other_causes"),
+                     c("lung-cancer diagnosis", "lung-cancer death", "other-cause death"))]
+ggplot(dd, aes(time, diff, colour = oracle)) +
+  annotate("rect", xmin = -Inf, xmax = Inf, ymin = -0.005, ymax = 0.005,
+           fill = "grey85", alpha = 0.5) +
+  geom_hline(yintercept = 0, colour = "grey45") +
+  geom_line(linewidth = 0.7) +
+  facet_grid(event ~ group) +
+  coord_cartesian(ylim = c(-0.008, 0.008)) +
+  scale_colour_manual(values = side_col, name = "fastMILC minus") +
+  labs(x = "years since study entry", y = "difference in cumulative incidence",
+       title = "Cumulative incidence, fastMILC minus archival (grey band: tolerance)")
+```
+
+## C. End to end, unmodified archival (descriptive)
+
+```{r e2e-desc}
+ec <- r$end_to_end[oracle == "unmodified"]
+kable(ec[group == "all", .(check, fastMILC = fmt(value_fast), archival = fmt(value_arch),
+                           difference = fmt(estimate), bound = fmt(bound))],
+      caption = "Whole population; differences include the D8 lookup lag.")
+```
+
+## Entry condition and archival NA draws
+
+```{r acceptance}
+kable(r$acceptance[, .(oracle, sex, status, n,
+  mean_tries = fmt(mean_tries, 3),
+  redrawn_for_entry = fmt(share_redrawn_entry, 4),
+  NA_draws_per_person = fmt(na_draws_per_person, 4))])
+```
+
+## Known differences
+
+1. **Lookup lag and `NA` draws of the archival mortality samplers (D8).** Not
+   reproduced; quantified in Sections A and C.
+2. **Shape within a table cell.** fastMILC uses a constant hazard in each
+   cell (exponential within the cell); the archival samplers draw uniformly
+   within the cell. The two agree at every knot.
+3. **Lung atom at $t = 0$ (R3).** Merged into the first cell in fastMILC and in
+   the exact-lookup oracle.
+4. **Maximum age.** This validation uses `milc.max_age = 110`; the fastMILC
+   default is 100 (model.tex, Section 2). Archival onset beyond 110 (search to
+   150) is not observable because everyone is dead by 110.
+
+## Timing (seconds)
+
+```{r timing}
+kable(data.table(step = names(r$timing), seconds = round(unlist(r$timing), 1)))
+```
