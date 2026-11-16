@@ -1,8 +1,8 @@
 ---
-title: "fastMILC: vectorizing MILC with nhppp"
+title: "Getting started with fastMILC"
 output: rmarkdown::html_vignette
 vignette: >
-  %\VignetteIndexEntry{fastMILC: vectorizing MILC with nhppp}
+  %\VignetteIndexEntry{Getting started with fastMILC}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
 ---
@@ -16,53 +16,164 @@ library(fastMILC)
 library(data.table)
 ```
 
-## Scope
-
-`fastMILC` re-implements the continuous-time microsimulation lung-cancer model
-MILC (Chrysanthopoulou, 2014). The archival package draws each person's
-history with scalar inverse-CDF and root-finding steps. `fastMILC` draws each
-component for the whole population at once with the `nhppp` samplers:
+`fastMILC` re-implements MILC, the continuous-time microsimulation model of
+the natural history of lung cancer (Chrysanthopoulou, 2014). For each person
+it simulates the onset of the first malignant cell, tumor growth, the ages at
+regional and distant disease, the age, stage and tumor diameter at clinical
+diagnosis, and the age and cause of death. Each component is drawn for the
+whole population at once:
 
 | Component | Model | Sampler |
 |---|---|---|
-| Death from other causes | step rates from the archival CIF tables | `nhppp::vdraw_sc_step()` |
-| Onset of the first malignant cell | two-stage clonal expansion, piecewise over the smoking history | `nhppp::vdraw_cumulative_intensity()` + vectorized Newton inverse |
-| Progression and stage | Gompertz growth, truncated log-normal volume thresholds | inverse CDF + row-wise rejection |
-| Death from lung cancer | step rates from the archival CIF tables | `nhppp::vdraw_sc_step()` |
+| Death from other causes | step hazards from the archival cumulative-incidence tables | `nhppp::vdraw_sc_step()` |
+| Onset of the first malignant cell | two-stage clonal expansion, piecewise over the smoking history | `nhppp::vdraw_cumulative_intensity()` with a vectorized Newton inverse |
+| Progression and stage | Gompertz growth, truncated log-normal volume thresholds | inverse CDF with row-wise rejection |
+| Death from lung cancer | step hazards from the archival cumulative-incidence tables | `nhppp::vdraw_sc_step()` |
 
 ## Simulating a population
 
-The canonical recipe is `synthetic_nlst_recipe`, synthetic NLST-like data on
-26,730 current and former smokers who enter the study on 2002-06-30. The
-simulation starts at entry; only people alive and without a diagnosed lung
-cancer at entry enter it.
+A simulation needs a population recipe, a parameter table and a set of random
+number streams. The defaults are the canonical recipe `synthetic_nlst_recipe`
+(26,730 synthetic NLST-like current and former smokers aged 49--79 who enter
+the study on 2002-06-30) and the baseline parameters `deterministic_params`
+(one row per sex).
+
+The random numbers come from named L'Ecuyer streams, one per model component,
+held in an `RNGStreams` object. Create it once per session with a seed and
+pass it to every simulation:
+
+```{r rng}
+rng <- RNGStreams$new(seed = rep(20021115, 6))
+```
+
+`Population$new()` draws `target_population_size` people from the recipe rows
+with replacement, with probability proportional to the recipe `weight`, and
+simulates their histories:
 
 ```{r simulate}
-options(milc.globalRNG.seed = rep(20021115, 6))
-pop <- Population$new(target_population_size = 1000)$getPopulation()
+p <- Population$new(target_population_size = 5000, rng_stream = rng)
+pop <- p$getPopulation()
 nrow(pop)
 ```
 
-Lung-cancer diagnoses during follow-up, by smoking status at entry:
+The simulation starts at study entry (`spawn_age`). Only people alive and
+without a diagnosed lung cancer at entry enter it; a person may have an
+undiagnosed malignancy at entry. Each row holds the person's covariates and
+parameters and the simulated history:
+
+```{r history}
+pop[!is.na(age_at_diagnosis)][1:3, .(
+  sex, spawn_age, smoking_status_at_spawn_age,
+  age_at_disease_onset, age_at_regional_disease, age_at_distal_disease,
+  age_at_diagnosis, stage_at_diagnosis, diameter_at_diagnosis,
+  age_dead, cause_of_death
+)]
+```
+
+Ages are in years. Follow-up ends at death or at the maximum age
+`getOption("milc.max_age")` (100); `age_dead` and `cause_of_death` are `NA` for
+a person alive at that age. Onset, the stage transitions and diagnosis are
+recorded only if they occur before the end of follow-up. The latent ages at
+death from each cause are kept in `age_dead_from_other_causes` and
+`age_dead_from_lung_cancer`.
+
+## Summarizing the histories
+
+Every simulated history is complete, so cumulative incidence within any
+window after entry is a proportion. Diagnoses and deaths within 5, 10 and 20
+years of entry:
 
 ```{r incidence}
-pop[, .(
-  n = .N,
-  diagnosed = mean(!is.na(age_at_diagnosis)),
-  died_of_lung_cancer = mean(cause_of_death == "lung_cancer", na.rm = TRUE)
-), by = smoking_status_at_spawn_age]
+within <- function(t, h) !is.na(t) & t <= h # event within h years of entry
+pop[, {
+  dx <- age_at_diagnosis - spawn_age
+  lung <- fifelse(cause_of_death %in% "lung_cancer", age_dead - spawn_age, NA_real_)
+  other <- fifelse(cause_of_death %in% "other_causes", age_dead - spawn_age, NA_real_)
+  h <- c(5, 10, 20)
+  .(
+    years = h,
+    diagnosed = sapply(h, function(x) mean(within(dx, x))),
+    lung_cancer_deaths = sapply(h, function(x) mean(within(lung, x))),
+    other_deaths = sapply(h, function(x) mean(within(other, x)))
+  )
+}]
 ```
 
-Stage at diagnosis:
+Stage at diagnosis, over the lifetime:
 
 ```{r stage}
-pop[!is.na(stage_at_diagnosis), .N, by = stage_at_diagnosis][, share := N / sum(N)][]
+pop[!is.na(stage_at_diagnosis), .N, by = stage_at_diagnosis][
+  , share := round(N / sum(N), 3)][]
 ```
 
-## Using a generator directly
+## Reproducibility
 
-Each component is a plain vectorized function. For example, ages at death
-from other causes for three 60-year-old men:
+`Population$new()` resets every stream of `rng` before it simulates, so the
+same recipe, parameters and seed give the same population:
+
+```{r reproduce}
+p_again <- Population$new(5000, rng_stream = rng)
+identical(p_again$getPopulation(), pop)
+```
+
+`reset()` removes the simulated columns and `update()` simulates them again
+from the start of each component's stream:
+
+```{r reset}
+p$reset()
+p$update()
+identical(p$getPopulation(), pop)
+```
+
+## Scenarios
+
+To compare scenarios, change the recipe or the parameters and keep the
+streams. Here the tumor growth rate is 20% higher:
+
+```{r scenario}
+fast_growth <- copy(deterministic_params)[, tumor_growth_rate := 1.2 * tumor_growth_rate]
+pop_fast <- Population$new(5000, parameters = fast_growth, rng_stream = rng)$getPopulation()
+rbind(
+  baseline = pop[, .(diagnosed = mean(!is.na(age_at_diagnosis)),
+                     mean_diameter = mean(diameter_at_diagnosis, na.rm = TRUE),
+                     lung_cancer_deaths = mean(cause_of_death %in% "lung_cancer"))],
+  faster_growth = pop_fast[, .(diagnosed = mean(!is.na(age_at_diagnosis)),
+                               mean_diameter = mean(diameter_at_diagnosis, na.rm = TRUE),
+                               lung_cancer_deaths = mean(cause_of_death %in% "lung_cancer"))]
+)
+```
+
+Both scenarios use the same streams, but the random numbers are not paired
+person by person across scenarios: the entry condition redraws different
+people when the parameters change.
+
+A recipe is a `data.table` with one row per stratum (here one row per
+person), in the format of `synthetic_nlst_recipe`. For example, current
+smokers only:
+
+```{r recipe}
+current <- synthetic_nlst_recipe[smoking_status_at_spawn_age == "current"]
+pop_current <- Population$new(5000, recipe = current, rng_stream = rng)$getPopulation()
+pop_current[, .(n = .N, diagnosed = mean(!is.na(age_at_diagnosis)))]
+```
+
+`Population$new()` checks the recipe: the required columns, smoking status
+(`never`, `former`, `current`) and intensity, and dates of birth, starting and
+quitting smoking, and study entry that agree with the status and with each
+other.
+
+## Options
+
+| Option | Default | Meaning |
+|---|---|---|
+| `milc.max_age` | 100 | maximum age; the archival code used 110 (other causes) and 150 (onset) |
+| `milc.death_other_tail` | `"archival"` | other-cause death beyond the tabulated window: the archival rule, or `"corrected"` |
+| `milc.progression_method` | `"rejection"` | truncated volume thresholds by rejection, or `"conditional"` (three uniforms per person, for common random numbers in calibration) |
+
+## Using a component directly
+
+Each component is a vectorized function. Ages at death from other causes for
+three 60-year-old men:
 
 ```{r generator}
 generate_death_other(
@@ -73,5 +184,20 @@ generate_death_other(
 )
 ```
 
-The model mathematics and every difference from the archival code are
-documented in `model_description/model.tex` in the source repository.
+Progression for two people with onset at ages 50 and 60:
+
+```{r progression}
+generate_progression(
+  age_onset = c(50, 60),
+  params = deterministic_params[sex == "male"][c(1, 1)]
+)
+```
+
+These functions draw from R's current random number generator; inside
+`Population` each component uses its own stream.
+
+## Further documentation
+
+The model mathematics, every difference from the archival code, and the
+validation against the archival package are in `model_description/model.tex`
+in the source repository. The validation harness is in `validation/`.
