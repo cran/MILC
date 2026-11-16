@@ -51,3 +51,33 @@ test_that("reset() and update() reproduce the simulation", {
   sim$p$update()
   expect_identical(sim$p$getPopulation(), sim$pop)
 })
+
+test_that("probability sampling gives the target size, follows weights, and is reproducible", {
+  expect_identical(nrow(get_sim()$pop), 1000L)
+  rec <- data.table::copy(synthetic_nlst_recipe)
+  cur <- rec$smoking_status_at_spawn_age == "current"
+  rec[, weight := ifelse(cur, 3, 1)]
+  target <- 3 * sum(cur) / (3 * sum(cur) + sum(!cur))
+  n <- 20000L
+  draw <- function() {
+    suppressWarnings(Population$new(n, recipe = rec,
+                                    simulate_at_initialization = FALSE))$getPopulation()
+  }
+  pop1 <- draw()
+  expect_identical(nrow(pop1), n)
+  share <- mean(pop1$smoking_status_at_spawn_age == "current")
+  expect_lt(abs(share - target), 5 * sqrt(target * (1 - target) / n))
+  expect_identical(draw(), pop1)
+  # a target above the recipe size samples rows more than once
+  expect_identical(nrow(suppressWarnings(
+    Population$new(30000L, simulate_at_initialization = FALSE)
+  )$getPopulation()), 30000L)
+})
+
+test_that("target_population_size is validated", {
+  for (bad in list(0, -1, 10.5, NA, c(10, 20), "10")) {
+    expect_error(suppressWarnings(
+      Population$new(bad, simulate_at_initialization = FALSE)
+    ), "positive integer")
+  }
+})

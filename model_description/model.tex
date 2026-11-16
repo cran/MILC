@@ -99,6 +99,14 @@ placeholders: the moments of starting and quitting should be obtained from the
 CISNET Smoking History Generator, conditional on sex, birth cohort, and
 smoking status and intensity at entry.
 
+\paragraph{Population sampling.} A simulated population of size $N$ is a
+probability sample from the recipe: the counts of copies of the $J$ recipe
+rows are $(n_1,\dots,n_J) \sim \mathrm{Multinomial}(N;\ w_1/W,\dots,w_J/W)$,
+with $w_j$ the row \code{weight} and $W = \sum_j w_j$, drawn from the
+\code{population} stream. The size is exactly $N$, and $N$ may exceed $J$
+(rows are then sampled more than once). The archival code has no recipe; this
+step is new in fastMILC.
+
 \paragraph{Onset (Section~\ref{sec:onset}).} $\Tmal$ is drawn from birth, not
 conditioned on $\Tmal>\Tentry$, with \code{vdraw\_cumulative\_intensity}
 (\code{report\_first\_K = 1}) on $[0,M]$ and the closed-form $\Lambda_{\mathrm{mal}}$

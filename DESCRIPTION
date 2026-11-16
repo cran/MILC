@@ -25,9 +25,12 @@ Depends:
 Imports:
     R6,
     data.table,
-    nhppp (>= 1.1.0),
+    nhppp (>= 1.1.0.9000),
     rlecuyer,
-    stats
+    stats,
+    utils
+Remotes:
+    bladder-ca/nhppp
 Suggests:
     testthat (>= 3.0.0),
     knitr,

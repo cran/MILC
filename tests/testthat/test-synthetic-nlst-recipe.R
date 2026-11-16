@@ -74,7 +74,7 @@ test_that("Population builds from the canonical recipe", {
     Population$new(1000, simulate_at_initialization = FALSE)
   )
   pop <- p$getPopulation()
-  expect_identical(nrow(pop), 26730L)
+  expect_identical(nrow(pop), 1000L)
   expect_true(all(c("study_entry_moment", "smoking_start_moment",
                     "smoking_quit_moment", "birth_cohort") %in% names(pop)))
   expect_identical(

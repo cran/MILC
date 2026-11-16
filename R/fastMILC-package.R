@@ -26,4 +26,8 @@
 
 #' @import data.table
 #' @importFrom R6 R6Class
+#' @importFrom utils globalVariables
 NULL
+
+# data.table non-standard-evaluation symbols (R CMD check "no visible binding")
+globalVariables(c("person_id", "weight", "x.stratum_row"))

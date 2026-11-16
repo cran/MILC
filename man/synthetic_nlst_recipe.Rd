@@ -36,8 +36,9 @@ synthetic_nlst_recipe
 Synthetic NLST-like data: the canonical population recipe for a fastMILC
 simulation, in the format \code{\link[=validate_recipe]{validate_recipe()}} checks. One row per person:
 26,730 current and former smokers aged 49--79 who enter the study on
-2002-06-30 (the NLST enrollment period). \code{Population$new()} expands the
-recipe to a population of the requested size in proportion to \code{weight}.
+2002-06-30 (the NLST enrollment period). \code{Population$new()} draws a
+population of the requested size from the recipe rows with replacement,
+with probability proportional to \code{weight}.
 Built from \code{data-raw/nlst_recipe.rda} (one row per stratum with a count) by
 \verb{data-raw/20_synthetic_nlst_recipe.R}.
 }

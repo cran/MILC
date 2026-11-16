@@ -19,9 +19,10 @@ Population <- R6::R6Class(
   public = list(
     #' @description Build the population from a recipe and, optionally,
     #'   simulate it.
-    #' @param target_population_size target number of people. Each recipe row
-    #'   contributes `ceiling(weight / sum(weight) * target_population_size)`
-    #'   people.
+    #' @param target_population_size number of people, a positive integer.
+    #'   People are drawn with replacement from the recipe rows with
+    #'   probability proportional to `weight` (multinomial counts per row, from
+    #'   the `"population"` stream), so the population has exactly this size.
     #' @param recipe population recipe; see [validate_recipe()]. Default
     #'   [synthetic_nlst_recipe].
     #' @param parameters model parameters, one row per sex; default
@@ -45,7 +46,14 @@ Population <- R6::R6Class(
         after = FALSE
       )
 
-      private$.target_population_size <- target_population_size
+      if (!is.numeric(target_population_size) ||
+          length(target_population_size) != 1L ||
+          is.na(target_population_size) ||
+          target_population_size < 1 ||
+          target_population_size != round(target_population_size)) {
+        stop("`target_population_size` must be a positive integer")
+      }
+      private$.target_population_size <- as.integer(target_population_size)
       private$.parameters <- parameters
       private$.generatePopulationFromRecipe(
         recipe = recipe,
@@ -152,10 +160,12 @@ Population <- R6::R6Class(
         check = check
       )
 
+      # probability sampling: multinomial counts per recipe row, total exactly
+      # target_population_size (the "population" stream is active)
       private$.recipe[, `:=`(
-        sim_count = ceiling(
-          weight / sum(weight) * private$.target_population_size
-        ),
+        sim_count = as.vector(stats::rmultinom(
+          1L, private$.target_population_size, weight
+        )),
         stratum_id = seq_len(.N)
       )]
 

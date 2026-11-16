@@ -51,9 +51,10 @@ simulate it.
 \subsection{Arguments}{
 \if{html}{\out{<div class="arguments">}}
 \describe{
-\item{\code{target_population_size}}{target number of people. Each recipe row
-contributes \code{ceiling(weight / sum(weight) * target_population_size)}
-people.}
+\item{\code{target_population_size}}{number of people, a positive integer.
+People are drawn with replacement from the recipe rows with
+probability proportional to \code{weight} (multinomial counts per row, from
+the \code{"population"} stream), so the population has exactly this size.}
 
 \item{\code{recipe}}{population recipe; see \code{\link[=validate_recipe]{validate_recipe()}}. Default
 \link{synthetic_nlst_recipe}.}
