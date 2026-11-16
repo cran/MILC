@@ -25,7 +25,9 @@ Depends:
 Imports:
     R6,
     data.table,
-    nhppp
+    nhppp (>= 1.1.0),
+    rlecuyer,
+    stats
 Suggests:
     testthat (>= 3.0.0),
     knitr,
@@ -35,6 +37,7 @@ Config/testthat/edition: 3
 Roxygen: list(markdown = TRUE)
 RoxygenNote: 7.3.3
 Collate: 
+    'fastMILC-package.R'
     'utils-helper.R'
     'RNGStreams.R'
     'utils-validate_recipe.R'

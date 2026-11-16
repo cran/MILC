@@ -4,10 +4,31 @@
 #' following the `nhppp`-DES idioms from the Trikalinos, Alarid,  Sereda, and Chrysanthopoulou
 #' DES with `nhppp` paradigm.
 #'
+#' The simulation starts at study entry. Only people alive and without a
+#' clinically diagnosed lung cancer at entry enter; undiagnosed malignancies at
+#' entry are allowed. Simulated columns: `age_dead_from_other_causes` and
+#' `age_dead_from_lung_cancer` (latent), `age_at_disease_onset`,
+#' `age_at_regional_disease`, `age_at_distal_disease`, `age_at_diagnosis`,
+#' `diameter_at_diagnosis`, `stage_at_diagnosis` (recorded only before the
+#' end of follow-up), `age_dead`, `cause_of_death` (`NA` if alive at
+#' `getOption("milc.max_age")`).
+#'
 #' @export
 Population <- R6::R6Class(
   classname = "Population",
   public = list(
+    #' @description Build the population from a recipe and, optionally,
+    #'   simulate it.
+    #' @param target_population_size target number of people. Each recipe row
+    #'   contributes `ceiling(weight / sum(weight) * target_population_size)`
+    #'   people.
+    #' @param recipe population recipe; see [validate_recipe()]. Default
+    #'   [synthetic_nlst_recipe].
+    #' @param parameters model parameters, one row per sex; default
+    #'   [deterministic_params].
+    #' @param rng_stream an [RNGStreams] object (one stream per model
+    #'   component).
+    #' @param simulate_at_initialization if `TRUE`, run `update()`.
     initialize = function(
       target_population_size,
       recipe = fastMILC::synthetic_nlst_recipe,
@@ -15,7 +36,6 @@ Population <- R6::R6Class(
       rng_stream = RNGStreams$new(),
       simulate_at_initialization = TRUE
     ) {
-      #browser()
       private$.rng_stream <- rng_stream
       private$.rng_stream$resetAllStreams()
       private$.rng_stream$activateStream("population")
@@ -33,10 +53,7 @@ Population <- R6::R6Class(
         drop_empty_strata = TRUE,
         check = TRUE
       )
-      private$.updatePersonParameterValues(
-        reset_rng_stream = TRUE,
-        drop_intermediate_params = TRUE
-      )
+      private$.updatePersonParameterValues(reset_rng_stream = TRUE)
       private$.simulation_erased <- TRUE
 
       if (simulate_at_initialization) {
@@ -171,29 +188,12 @@ Population <- R6::R6Class(
       )
     },
 
-    .setPopulation = function(population, copy) {
-      stopifnot(data.table::is.data.table(population))
-      required <- c("id", "sex", "spawn_age", "max_simulation_age")
-      stopifnot(all(required %in% names(population)))
-      private$.population <- if (copy) {
-        data.table::copy(population)
-      } else {
-        population
-      }
-      data.table::setindex(private$.population, id)
-      invisible(self)
-    },
-
-    .updatePersonParameterValues = function(
-      reset_rng_stream,
-      drop_intermediate_params = TRUE
-    ) {
+    .updatePersonParameterValues = function(reset_rng_stream) {
       on.exit(
         private$.rng_stream$activateStream("population"),
         add = TRUE,
         after = FALSE
       )
-      #browser()
       if (reset_rng_stream) {
         private$.rng_stream$resetStream("parameters")
       }

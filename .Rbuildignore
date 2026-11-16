@@ -9,3 +9,6 @@
 ^.*\.Rproj$
 ^\.Rproj\.user$
 ^LICENSE\.md$
+^STATUS\.md$
+^model_description$
+^\.gitignore$

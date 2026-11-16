@@ -2,18 +2,22 @@
 #'
 #' @description This class is used to handle the switching of RNGStreams for whole tasks.
 #' It is based on the rlecuyer package, which provides an interface to the L'Ecuyer random number generator.
-#' It generates the random number streams that are needed by Kystis (vectorized).
+#' It generates the random number streams that are needed by fastMILC (vectorized).
 #' Only one instance of this class can be generated.
-#' @param antithetic logical, whether to use antithetic variates.
-#' @param increased_precision logical, whether to use increased precision.
-#' @param stream_names character vector, names of the streams to be created. Set to package options.
-#' @param seed integer vector, seed for the random number generator. Set to package options.
 #' @import rlecuyer
 #' @export
 RNGStreams <- R6::R6Class(
   classname = "RNGStreams",
   cloneable = FALSE,
   public = list(
+    #' @description Create the named streams. Creating a new object removes
+    #'   the streams of any previous one.
+    #' @param antithetic logical, whether to use antithetic variates.
+    #' @param increased_precision logical, whether to use increased precision.
+    #' @param stream_names character vector, names of the streams to be
+    #'   created. Set to package options.
+    #' @param seed integer vector, seed for the random number generator. Set
+    #'   to package options.
     initialize = function(
       antithetic = getOption("milc.antithetic"),
       increased_precision = FALSE,
@@ -68,7 +72,6 @@ RNGStreams <- R6::R6Class(
     #' @param stream character, the name of the stream to activate, or "R" to use the default RNGkind.
     #' @return invisible(self)
     activateStream = function(stream) {
-      # browser()
       if (stream == "R") {
         return(private$.unsetCurrentStream())
       }

@@ -2,10 +2,17 @@
 % Please edit documentation in R/utils-helper.R
 \name{calendar_year_from_date}
 \alias{calendar_year_from_date}
-\title{Helper functions}
+\title{Calendar year of a date}
 \usage{
 calendar_year_from_date(date_moment)
 }
-\description{
-Small utility functions. Not to be exported to the user.
+\arguments{
+\item{date_moment}{\code{Date} vector.}
 }
+\value{
+numeric calendar years.
+}
+\description{
+Calendar year of a date
+}
+\keyword{internal}

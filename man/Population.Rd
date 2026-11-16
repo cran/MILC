@@ -12,6 +12,15 @@ MILC microsimulation model (R6)
 Encapsulates a MILC natural-history simulation over a \code{data.table} population,
 following the \code{nhppp}-DES idioms from the Trikalinos, Alarid,  Sereda, and Chrysanthopoulou
 DES with \code{nhppp} paradigm.
+
+The simulation starts at study entry. Only people alive and without a
+clinically diagnosed lung cancer at entry enter; undiagnosed malignancies at
+entry are allowed. Simulated columns: \code{age_dead_from_other_causes} and
+\code{age_dead_from_lung_cancer} (latent), \code{age_at_disease_onset},
+\code{age_at_regional_disease}, \code{age_at_distal_disease}, \code{age_at_diagnosis},
+\code{diameter_at_diagnosis}, \code{stage_at_diagnosis} (recorded only before the
+end of follow-up), \code{age_dead}, \code{cause_of_death} (\code{NA} if alive at
+\code{getOption("milc.max_age")}).
 }
 \section{Methods}{
 \subsection{Public methods}{
@@ -27,6 +36,8 @@ DES with \code{nhppp} paradigm.
 \if{html}{\out{<a id="method-Population-new"></a>}}
 \if{latex}{\out{\hypertarget{method-Population-new}{}}}
 \subsection{Method \code{new()}}{
+Build the population from a recipe and, optionally,
+simulate it.
 \subsection{Usage}{
 \if{html}{\out{<div class="r">}}\preformatted{Population$new(
   target_population_size,
@@ -37,6 +48,26 @@ DES with \code{nhppp} paradigm.
 )}\if{html}{\out{</div>}}
 }
 
+\subsection{Arguments}{
+\if{html}{\out{<div class="arguments">}}
+\describe{
+\item{\code{target_population_size}}{target number of people. Each recipe row
+contributes \code{ceiling(weight / sum(weight) * target_population_size)}
+people.}
+
+\item{\code{recipe}}{population recipe; see \code{\link[=validate_recipe]{validate_recipe()}}. Default
+\link{synthetic_nlst_recipe}.}
+
+\item{\code{parameters}}{model parameters, one row per sex; default
+\link{deterministic_params}.}
+
+\item{\code{rng_stream}}{an \link{RNGStreams} object (one stream per model
+component).}
+
+\item{\code{simulate_at_initialization}}{if \code{TRUE}, run \code{update()}.}
+}
+\if{html}{\out{</div>}}
+}
 }
 \if{html}{\out{<hr>}}
 \if{html}{\out{<a id="method-Population-update"></a>}}

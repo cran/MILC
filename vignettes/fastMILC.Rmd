@@ -13,31 +13,65 @@ knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
 
 ```{r setup}
 library(fastMILC)
+library(data.table)
 ```
 
 ## Scope
 
 `fastMILC` re-implements the continuous-time microsimulation lung-cancer model
-MILC with vectorized `nhppp` sampling over a `data.table` population. This
-vignette is a **scaffold placeholder**; it will grow into a walk-through of the
-scalar-to-vectorized refactor as the event generators are implemented.
+MILC (Chrysanthopoulou, 2014). The archival package draws each person's
+history with scalar inverse-CDF and root-finding steps. `fastMILC` draws each
+component for the whole population at once with the `nhppp` samplers:
 
-## Ported kernel functions
+| Component | Model | Sampler |
+|---|---|---|
+| Death from other causes | step rates from the archival CIF tables | `nhppp::vdraw_sc_step()` |
+| Onset of the first malignant cell | two-stage clonal expansion, piecewise over the smoking history | `nhppp::vdraw_cumulative_intensity()` + vectorized Newton inverse |
+| Progression and stage | Gompertz growth, truncated log-normal volume thresholds | inverse CDF + row-wise rejection |
+| Death from lung cancer | step rates from the archival CIF tables | `nhppp::vdraw_sc_step()` |
 
-The pure MILC kernels are vectorized and validated against the archival scalars:
+## Simulating a population
 
-```{r}
-milc_HT_mal(t = c(50, 60, 70), gender = "male", d = 20, smok_status = "Y")
-milc_age_grp(c(38, 47, 88))
+The canonical recipe is `synthetic_nlst_recipe`, synthetic NLST-like data on
+26,730 current and former smokers who enter the study on 2002-06-30. The
+simulation starts at entry; only people alive and without a diagnosed lung
+cancer at entry enter it.
+
+```{r simulate}
+options(milc.globalRNG.seed = rep(20021115, 6))
+pop <- Population$new(target_population_size = 1000)$getPopulation()
+nrow(pop)
 ```
 
-## Converted mortality tables
+Lung-cancer diagnoses during follow-up, by smoking status at entry:
 
-The archival cumulative-incidence tables are shipped as tidy step-hazard
-`data.table`s (tabulated horizon only; upper-tail handling is a separate design
-decision):
-
-```{r}
-head(other_cells)
-head(lung_cells)
+```{r incidence}
+pop[, .(
+  n = .N,
+  diagnosed = mean(!is.na(age_at_diagnosis)),
+  died_of_lung_cancer = mean(cause_of_death == "lung_cancer", na.rm = TRUE)
+), by = smoking_status_at_spawn_age]
 ```
+
+Stage at diagnosis:
+
+```{r stage}
+pop[!is.na(stage_at_diagnosis), .N, by = stage_at_diagnosis][, share := N / sum(N)][]
+```
+
+## Using a generator directly
+
+Each component is a plain vectorized function. For example, ages at death
+from other causes for three 60-year-old men:
+
+```{r generator}
+generate_death_other(
+  age_entry = c(60, 60, 60),
+  sex = rep("male", 3),
+  smoking_status = c("never", "former", "current"),
+  intensity = c(0, 20, 20)
+)
+```
+
+The model mathematics and every difference from the archival code are
+documented in `model_description/model.tex` in the source repository.

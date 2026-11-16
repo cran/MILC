@@ -6,7 +6,7 @@
 \description{
 This class is used to handle the switching of RNGStreams for whole tasks.
 It is based on the rlecuyer package, which provides an interface to the L'Ecuyer random number generator.
-It generates the random number streams that are needed by Kystis (vectorized).
+It generates the random number streams that are needed by fastMILC (vectorized).
 Only one instance of this class can be generated.
 }
 \section{Methods}{
@@ -28,6 +28,8 @@ Only one instance of this class can be generated.
 \if{html}{\out{<a id="method-RNGStreams-new"></a>}}
 \if{latex}{\out{\hypertarget{method-RNGStreams-new}{}}}
 \subsection{Method \code{new()}}{
+Create the named streams. Creating a new object removes
+the streams of any previous one.
 \subsection{Usage}{
 \if{html}{\out{<div class="r">}}\preformatted{RNGStreams$new(
   antithetic = getOption("milc.antithetic"),
@@ -44,9 +46,11 @@ Only one instance of this class can be generated.
 
 \item{\code{increased_precision}}{logical, whether to use increased precision.}
 
-\item{\code{stream_names}}{character vector, names of the streams to be created. Set to package options.}
+\item{\code{stream_names}}{character vector, names of the streams to be
+created. Set to package options.}
 
-\item{\code{seed}}{integer vector, seed for the random number generator. Set to package options.}
+\item{\code{seed}}{integer vector, seed for the random number generator. Set
+to package options.}
 }
 \if{html}{\out{</div>}}
 }
